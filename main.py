@@ -176,8 +176,9 @@ sekme_operasyon, sekme_grafik, sekme_veritabani, sekme_gonullu = st.tabs([
     "🌱 Haydi Umut Ol! (Doğa & Gönüllülük)"
 ])
 
-# 1. SEKME: CANLI OPERASYON
+# 1. SEKME: CANLI OPERASYON - GÜNCEL VE HATASIZ YAPI
 with sekme_operasyon:
+    # Risk seviyesine göre değişkenleri belirle
     if risk > 75:
         seviye = "3. DERECE (KRİTİK ACİL DURUM)"
         afad_durum = "🚨 AFAD KRİZ MASASI OTOMATİK TETİKLENDİ. HAVA DESTEĞİ PROTOKOLÜ AKTİF."
@@ -191,6 +192,7 @@ with sekme_operasyon:
         afad_durum = "⚪ AFAD Aktivasyonuna Gerek Görülmedi."
         renk_kod = "#00C853"
 
+    # Operasyonel Durum Kartı
     st.markdown(f"""
     <div class="sahin-card" style="border-left: 8px solid {renk_kod}; margin-top:10px;">
         <h4 style="color:{renk_kod}; margin-top:0;">🔥 Yangın Seviyesi: {seviye}</h4>
@@ -200,16 +202,27 @@ with sekme_operasyon:
     </div>
     """, unsafe_allow_html=True)
 
+    # Butonlar (Profesyonel Arayüz)
     col_btn1, col_btn2, col_btn3 = st.columns(3)
+    
     with col_btn1:
-        if st.button("🚨 AFAD Kriz Merkezini Çağır", use_container_width=True): st.success("AFAD hattına veri paketi başarıyla gönderildi!")
+        if st.button("🚨 AFAD Kriz Merkezini Çağır", use_container_width=True): 
+            st.success("AFAD hattına veri paketi başarıyla gönderildi!")
+            
     with col_btn2:
-        if st.button("🚒 İtfaiye Rotalarını Çiz", use_container_width=True): st.info(f"{koordinat['itfaiye']} için en hızlı rota oluşturuldu.")
+        if st.button("🚒 İtfaiye Rotalarını Çiz", use_container_width=True): 
+            st.info(f"{koordinat['itfaiye']} için en hızlı rota oluşturuldu.")
+            
     with col_btn3:
-        if st.button("🎙️ ŞAHİN Asistanı Sesli Dinle", use_container_width=True):
-            konusma = f"{ilce_adi} bölgesinde yangın riski yüzde {risk} olarak ölçüldü."
-            sahin_seslendir(konusma)
-
+        if st.button("🎙️ ŞAHİN Analiz Raporunu Dinle", use_container_width=True):
+            # Analiz mantığı
+            analiz_metni = f"{ilce_adi} bölgesinde yangın riski yüzde {risk} olarak ölçüldü."
+            if risk > 75:
+                analiz_metni += " Rüzgar ve sıcaklık nedeniyle yayılma hızı çok yüksek, acil müdahale gereklidir!"
+            
+            sahin_seslendir(analiz_metni)
+            st.write(f"**ŞAHİN Analiz Raporu:** {analiz_metni}")
+            
 # 2. SEKME: GEÇMİŞ RİSK GRAFİĞİ
 with sekme_grafik:
     st.markdown(f"#### 📈 {ilce_adi} İlçesi Son 24 Saatlik Risk Değişim Grafiği")
