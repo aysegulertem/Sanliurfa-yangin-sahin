@@ -2,9 +2,9 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import folium
+from streamlit_folium import st_folium
 from streamlit_autorefresh import st_autorefresh
 import warnings
-import winsound
 import os
 import asyncio
 import edge_tts
@@ -14,24 +14,30 @@ from datetime import datetime
 warnings.filterwarnings("ignore")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# ==============================================================================
+# 🔉 BULUT UYUMLU, ASENKRON ŞAHİN SES MOTORU (STREAMLIT CLOUD OPTİMİZASYONU)
+# ==============================================================================
+async def ses_vektörü_üret(metin, dosya_yolu):
+    """Microsoft Edge AI motorunu kullanarak asenkron ses dosyası üretir."""
+    VOICE = "tr-TR-AhmetNeural"
+    communicator = edge_tts.Communicate(metin, VOICE, rate="+25%")
+    await communicator.save(dosya_yolu)
 
-# ==============================================================================
-# 🔉 %100 TARAYICI UYUMLU, TOK VE HIZLI ERKEK SESİ (MICROSOFT EDGE AI)
-# ==============================================================================
 def sahin_seslendir(metin):
-    """ŞAHİN'in yanıtını yapay zeka üretimi doğal bir erkek sesiyle tarayıcıda oynatır."""
+    """ŞAHİN'in yanıtını bulut sunucusunda gecikmesiz ve takılmasız oynatır."""
     try:
         ses_yolu = os.path.join(BASE_DIR, "sahin_ses.mp3")
+        
+        # Bulut sunucularındaki asenekron döngü karmaşasını önleyen kararlı tetikleyici
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+        loop.run_until_complete(ses_vektörü_üret(metin, ses_yolu))
 
-        # Microsoft AI Türkçe Erkek Sesi (Ahmet) seçiliyor.
-        # Hız (+25%) ayarlanarak ŞAHİN'in serileşmesi sağlanıyor.
-        VOICE = "tr-TR-AhmetNeural"
-        communicator = edge_tts.Communicate(metin, VOICE, rate="+25%")
-
-        # Asenkron çalışan ses üretimini Streamlit içinde senkronize tetikliyoruz
-        asyncio.run(communicator.save(ses_yolu))
-
-        # Ses dosyasını tarayıcıya enjekte etmek için Base64'e çeviriyoruz
+        # Ses verisini tarayıcıya enjekte etme (Milisaniyelik gecikme önleyici katman)
         with open(ses_yolu, "rb") as f:
             ses_bytes = f.read()
         b64_ses = base64.b64encode(ses_bytes).decode()
@@ -43,8 +49,7 @@ def sahin_seslendir(metin):
             """
         st.markdown(md, unsafe_allow_html=True)
     except Exception as e:
-        pass
-
+        st.error(f"Ses Sentezleme Hatası: {e}")
 
 # ==============================================================================
 # 📊 SAYFA YAPILANDIRMASI VE HAFIZA SİSTEMİ
@@ -73,8 +78,7 @@ sicaklik = round(float(np.random.uniform(32.0, 44.0)), 1)
 nem = round(float(np.random.uniform(8.0, 25.0)), 1)
 rüzgar = round(float(np.random.uniform(12.0, 38.0)), 1)
 risk = max(0, min(100, int((sicaklik * 1.6) - nem + (rüzgar * 0.6))))
-son_veri = {"bölge": "Karaköprü / Şanlıurfa", "sicaklik": sicaklik, "nem": nem, "rüzgar": rüzgar,
-            "zaman": datetime.now().strftime("%H:%M:%S")}
+son_veri = {"bölge": "Karaköprü / Şanlıurfa", "sicaklik": sicaklik, "nem": nem, "rüzgar": rüzgar, "zaman": datetime.now().strftime("%H:%M:%S")}
 
 # ==============================================================================
 # 🖥️ ARAYÜZ TASARIMI (METRİKLER VE HARİTA)
@@ -94,26 +98,21 @@ with col1:
     """, unsafe_allow_html=True)
     st.write("")
     st.metric(label="🚨 ŞAHİN Yapay Zeka Yangın Riski", value=f"%{risk}", delta=f"{risk - 50} Sınır Değeri")
-    if risk > 70:
-        winsound.Beep(1200, 100)
 
 with col2:
     st.subheader("🗺️ Bölgesel Risk Analiz Haritası")
     m = folium.Map(location=[37.1950, 38.8150], zoom_start=13)
     renk = "red" if risk > 70 else "orange" if risk > 40 else "green"
-    folium.CircleMarker(location=[37.1950, 38.8150], radius=25, popup=f"Karaköprü Risk: %{risk}", color=renk, fill=True,
-                        fill_color=renk).add_to(m)
+    folium.CircleMarker(location=[37.1950, 38.8150], radius=25, popup=f"Karaköprü Risk: %{risk}", color=renk, fill=True, fill_color=renk).add_to(m)
     st_folium(m, width="stretch", height=300)
 
 # ==============================================================================
-# 🤖 MİMARİ KATMAN: GERÇEK ERKEK SESLİ ŞAHİN v2
+# 🤖 MİMARİ KATMAN: ŞAHİN v2 CLOUD PRODUCTION SÜRÜMÜ
 # ==============================================================================
 st.write("---")
 st.subheader("🧠 Robotik Akıl Yürütme ve Üretim Merkezi (ŞAHİN v2)")
 
-st.markdown(
-    "<p style='color: #aaa;'>🎙️ <b>Jüri Özel İletişim Protokolü:</b> ŞAHİN'e telsiz kanalı üzerinden ismiyle hitap ederek sesli komut simülasyonunu başlatın.</p>",
-    unsafe_allow_html=True)
+st.markdown("<p style='color: #aaa;'>🎙️ <b>Jüri Özel İletişim Protokolü:</b> ŞAHİN'e telsiz kanalı üzerinden ismiyle hitap ederek sesli komut simülasyonunu başlatın.</p>", unsafe_allow_html=True)
 
 col_t1, col_t2 = st.columns([1, 2])
 with col_t1:
@@ -128,18 +127,17 @@ with col_t2:
 if st.session_state.yz_etap > 0:
     st.write("")
     st.markdown("### 🔄 ŞAHİN Bilişsel Mimari Akışı")
-
+    
     durum_etiket = "YÜKSEK ALARM" if risk > 65 else "STANDART OPERASYON"
     isik = "🟢" if risk < 50 else "🟡" if risk < 75 else "🔴"
-
+    
     # 1. AŞAMA: ANLAMA
     st.markdown("#### 📥 1. Aşama: Akıllı Ses ve Niyet Çözümleme (Anlama)")
-    st.info(
-        f"🎤 **Gelen Ses Dalgası Algılandı:** \"{user_input}\"\n\n⚙️ **Niyet Analizi:** Kullanıcı, 'ŞAHİN' kimlik çağrısını kullandı. Karaköprü bölgesi telemetri verileri ve IoT risk motoru hedef alındı.")
-
-    # 2. AŞAMA: DÜŞÜNME (O Çok Beğendiğin Siber Tasarım)
+    st.info(f"🎤 **Gelen Ses Dalgası Algılandı:** \"{user_input}\"\n\n⚙️ **Niyet Analizi:** Kullanıcı, 'ŞAHİN' kimlik çağrısını kullandı. Karaköprü bölgesi telemetri verileri ve IoT risk motoru hedef alındı.")
+    
+    # 2. AŞAMA: DÜŞÜNME (Siber Tasarım)
     st.markdown("#### 💭 2. Aşama: Bağıntısal Düşünme ve Eşik Analizi (Düşünme)")
-
+    
     siber_log = f"""
     <div style="background-color: #0b0f19; border: 1px solid #1e293b; border-left: 5px solid #ffbc00; border-radius: 8px; padding: 20px; font-family: 'Courier New', monospace; color: #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.5);">
         <div style="color: #ffbc00; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #334155; padding-bottom: 5px;">🧠 ŞAHİN HİBRİT BİLİŞSEL MOTORU - AKIL YÜRÜTME LOGU</div>
@@ -154,25 +152,24 @@ if st.session_state.yz_etap > 0:
     </div>
     """
     st.markdown(siber_log, unsafe_allow_html=True)
-
+    
     # 3. AŞAMA: ÜRETİM
     st.markdown("#### 🏭 3. Aşama: Üretim ve Aksiyon Modülü (Üretim)")
-
+    
     sahin_yaniti = (
         f"**🤖 ŞAHİN Yapay Zeka Komuta Çıktısı:**\n\n"
         f"Komut başarıyla alındı ve anlaşıldı. Karaköprü istasyonu telemetri hatları kontrol edildi.\n\n"
         f"🔥 **Anlık Risk Seviyesi:** %{risk} | **Sistem Durumu:** {durum_etiket}\n\n"
         f"**📋 Üretilen Stratejik Aksiyon Maddeleri:**\n"
-        f"1. **IoT Veri Doğrulama:** {sicaklik}°C sıcaklık ve %{nem} nem dengesiyle oluşan risk katmanı doğrulanmıştır.\n"
+        f"1. **IoT Veri Doğrulama:** {sicaklik}°C sıcaklık and %{nem} nem dengesiyle oluşan risk katmanı doğrulanmıştır.\n"
         f"2. **Lojistik Entegrasyon:** Karaköprü itfaiye yerleşkesindeki operasyon ekipleri mevcut risk oranına göre bilgilendirilmiştir.\n"
         f"3. **Otomasyon Günlüğü:** Yangın kayıt sistemi (`yangin_gunlugu.txt`) anlık telemetri verileriyle güncellenmiştir."
     )
-
+    
     st.markdown(f"<div class='mimar-box'>{sahin_yaniti.replace('\n', '<br>')}</div>", unsafe_allow_html=True)
-
-    # 🚀 Yapay Zeka Destekli Erkek Sesiyle Anons Başlatılıyor
-    sahin_seslendir(
-        f"Şahin komutu algıladı. Karaköprü verileri düşünüldü ve işlendi. Yangın riski yüzde {risk}. Üretim protokolü aktif.")
+    
+    # ŞAHİN Akıcı Ses Aktivasyonu
+    sahin_seslendir(f"Şahin komutu algıladı. Karaköprü verileri düşünüldü ve işlendi. Yangın riski yüzde {risk}. Üretim protokolü aktif.")
 
 # ==============================================================================
 # 📋 VERİ TABANI KAYITLARI
