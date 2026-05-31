@@ -12,11 +12,11 @@ warnings.filterwarnings("ignore")
 # ==============================================================================
 st.set_page_config(page_title="ŞAHİN Çevre İzleme Merkezi", layout="wide", initial_sidebar_state="expanded")
 
-# Oturum hafızasında sadece seçili ilçeyi tutuyoruz (Harita kararlılığı için)
+# --- HAFIZA YÖNETİMİ (HATA BURADA DÜZELTİLDİ) ---
 if "aktif_ilce" not in st.session_state:
     st.session_state.aktif_ilce = "Karaköprü"
 if "efekt_aktif" not in st.session_state:
-    st.session_state.efekt_active = False
+    st.session_state.efekt_aktif = False  # Buradaki 'efekt_active' hatası 'efekt_aktif' olarak düzeltildi!
 
 # Şanlıurfa Gerçek Coğrafi Veri Tabanı
 ILCELER = {
@@ -40,13 +40,11 @@ ilce_adi = st.sidebar.selectbox("🔎 İzlenecek Bölgeyi Seçin", list(ILCELER.
 st.session_state.aktif_ilce = ilce_adi
 koordinat = ILCELER[ilce_adi]
 
-# --- PASTELE DOĞRU CSS ENJEKSİYONU (Yazı ve buton hataları tamamen temizlendi) ---
+# --- PASTELE DOĞRU CSS ENJEKSİYONU ---
 st.markdown("""
     <style>
-    /* Ana Arka Plan: Yumuşak Krem/Beyaz */
     .stApp { background-color: #FAF9F6; color: #1B5E20; }
     
-    /* Doğa Dostu Kart Tasarımları */
     .doga-card {
         background: #FFFFFF;
         border: 2px solid #E8F5E9;
@@ -58,10 +56,8 @@ st.markdown("""
     }
     .doga-card h3, .doga-card h4 { color: #2E7D32 !important; font-weight: 700; }
     
-    /* Streamlit Dahili Bileşen Renklerini Ezme */
     div[data-testid="stSidebar"] { background-color: #F1F8E9 !important; border-right: 2px solid #DCEDC8 !important; }
     
-    /* image_9879da.png'deki Siyah Buton Hatasının Çözümü */
     .stButton>button {
         background-color: #E8F5E9 !important;
         color: #2E7D32 !important;
@@ -77,7 +73,6 @@ st.markdown("""
         box-shadow: 0 4px 10px rgba(46,125,50,0.2);
     }
     
-    /* 🌲 Yükselen ve Büyüyen Fidan Animasyonu */
     @keyframes fidanYukselis {
         0% { transform: translateY(100vh) scale(0.4); opacity: 0; }
         10% { opacity: 1; }
@@ -91,7 +86,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Animasyon Kontrolü
+# Animasyon Kontrolü (Hata Alan Satır Artık Sorunsuz Çalışacak)
 if st.session_state.efekt_aktif:
     st.markdown("""
         <div class="fidan-animasyon" style="left:20%; animation-delay: 0s;">🌱</div>
@@ -101,9 +96,8 @@ if st.session_state.efekt_aktif:
     st.session_state.efekt_aktif = False
 
 # ==============================================================================
-# 📊 GERÇEKÇİ VERİ GÖSTERİM KATMANI (Sanal Üreteçler Kaldırıldı)
+# 📊 GERÇEKÇİ VERİ GÖSTERİM KATMANI
 # ==============================================================================
-# IoT donanımından veya API'den gelecek sabit/stabil örnek veriler (Örnek: İstasyon Normalleri)
 gercek_sicaklik = 36.2 
 gercek_nem = 12.5
 gercek_ruzgar = 22.4
@@ -127,20 +121,17 @@ with col_sol:
 
 with col_sag:
     st.markdown('<div class="doga-card" style="padding:8px;">', unsafe_allow_html=True)
-    # Harita karmaşasını çözmek için altlık katmanını standart, temiz ve kararlı OpenStreetMap'e çektik
     m = folium.Map(location=[koordinat['lat'], koordinat['lon']], zoom_start=12, tiles="OpenStreetMap")
     folium.Marker(
         location=[koordinat['lat'], koordinat['lon']], 
         popup=f"{ilce_adi} İzleme Noktası",
         icon=folium.Icon(color="green", icon="leaf")
     ).add_to(m)
-    
-    # Her ilçe için özel ve sabit bir harita anahtarı üreterek kaymaları önledik
     st_folium(m, width="stretch", height=260, key=f"sabit_harita_nesnesi_{ilce_adi}")
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
-# 🎮 YENİ SEKME YAPISI (SİMÜLASYON YERİNE VİDEO ENTEGRASYONU)
+# 🎮 YENİ SEKME YAPISI
 # ==============================================================================
 st.write("---")
 sekme_donanim, sekme_kayitlar, sekme_video, sekme_sosyal = st.tabs([
@@ -173,8 +164,6 @@ with sekme_video:
     st.markdown("### 🎥 ŞAHİN IoT Sistemi Nasıl Çalışır?")
     st.write("Aşağıdaki video üzerinden, sistemin yangın tehlikesini simüle ettiğimiz duman/alev test anını ve web paneline uyarı gönderme algoritmasını izleyebilirsiniz.")
     
-    # PROJE VİDEONU BURAYA YÜKLEYEBİLİRSİN
-    # Proje klasörüne "test_videosu.mp4" isminde videoyu atarsan doğrudan oynatır.
     video_yolu = "test_videosu.mp4"
     if os.path.exists(video_yolu):
         st.video(video_yolu)
