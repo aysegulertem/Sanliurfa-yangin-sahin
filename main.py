@@ -17,7 +17,15 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # ==============================================================================
 # 📱 TEMA VE SIRA DIŞI MOBİL ESTETİK AYARLARI (CSS DÖNÜŞÜMÜ)
 # ==============================================================================
-st.set_page_config(page_title="ŞAHİN Komuta Merkezi v2.5", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="ŞAHİN Komuta Merkezi v3.0", layout="wide", initial_sidebar_state="expanded")
+
+# --- HAFIZA YÖNETİMİ (SESSION STATE) ---
+if "akis_modu" not in st.session_state:
+    st.session_state.akis_modu = "🔄 Otomatik Canlı Simülasyon"
+if "secilen_ilce" not in st.session_state:
+    st.session_state.secilen_ilce = "Karaköprü"
+if "efekt_turu" not in st.session_state:
+    st.session_state.efekt_turu = None
 
 # Sol menü yapılandırması
 st.sidebar.markdown("## 🎨 Arayüz Özelleştirme")
@@ -25,7 +33,12 @@ tema = st.sidebar.selectbox("Görünüm Modu Seçin", ["🌃 Siber Koyu (Gece)",
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("## 🕹️ Harita Akış Denetimi")
-akis_modu = st.sidebar.radio("Çalışma Modu", ["🔄 Otomatik Canlı Simülasyon", "📍 Manuel İlçe Seçimi (Sabitle)"])
+akis_modu_input = st.sidebar.radio(
+    "Çalışma Modu", 
+    ["🔄 Otomatik Canlı Simülasyon", "📍 Manuel İlçe Seçimi (Sabitle)"],
+    index=0 if st.session_state.akis_modu == "🔄 Otomatik Canlı Simülasyon" else 1
+)
+st.session_state.akis_modu = akis_modu_input
 
 # 13 İlçeli Tam Coğrafi Veri Bankası
 ILCELER = {
@@ -44,11 +57,17 @@ ILCELER = {
     "Viranşehir": {"lat": 37.2353, "lon": 39.7619, "itfaiye": "Viranşehir Organize Sanayi İtfaiyesi", "orman_mud": "Viranşehir Orman Koruma ve Ağaçlandırma Şefliği"}
 }
 
-if akis_modu == "📍 Manuel İlçe Seçimi (Sabitle)":
-    ilce_adi = st.sidebar.selectbox("Hedef İlçe Seçin", list(ILCELER.keys()))
+# Akış Kontrolü ve Sabitleme Mekanizması
+if st.session_state.akis_modu == "📍 Manuel İlçe Seçimi (Sabitle)":
+    ilce_listesi = list(ILCELER.keys())
+    varsayilan_index = ilce_listesi.index(st.session_state.secilen_ilce) if st.session_state.secilen_ilce in ilce_listesi else 0
+    ilce_adi = st.sidebar.selectbox("Hedef İlçe Seçin", ilce_listesi, index=varsayilan_index)
+    st.session_state.secilen_ilce = ilce_adi
 else:
+    # Sadece simülasyon modunda tetiklenir
     st_autorefresh(interval=25000, key="sahin_global_refresh")
     ilce_adi = list(ILCELER.keys())[int(datetime.now().timestamp()) % len(ILCELER)]
+    st.session_state.secilen_ilce = ilce_adi
 
 koordinat = ILCELER[ilce_adi]
 
@@ -65,6 +84,7 @@ else:
     border_color = "#E2E8F0"
     accent_gradient = "linear-gradient(135deg, #00C853, #B2FF59)"
 
+# CSS ANIMASYONLARI (Yavaş balonlar ve yanıp sönen fidanlar)
 st.markdown(f"""
     <style>
     .stApp {{ background-color: {bg_color}; color: {text_color}; }}
@@ -83,8 +103,56 @@ st.markdown(f"""
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
     }}
+    
+    /* 🎈 Yavaş ve Alttan Yükselen Balon Animasyonu */
+    @keyframes yukselis {{
+        0% {{ transform: translateY(100vh) scale(0.5); opacity: 0; }}
+        10% {{ opacity: 1; }}
+        90% {{ opacity: 1; }}
+        100% {{ transform: translateY(-120vh) scale(1.2); opacity: 0; }}
+    }}
+    .balon-efekt {{
+        position: fixed; bottom: -10px; font-size: 30px;
+        animation: yukselis 7s linear infinite; z-index: 9999;
+    }}
+    
+    /* 🌱 Yanıp Sönen Parlayan Fidan Animasyonu */
+    @keyframes parlama {{
+        0%, 100% {{ transform: scale(1); filter: drop-shadow(0 0 2px #00C853); opacity: 0.3; }}
+        50% {{ transform: scale(1.3); filter: drop-shadow(0 0 15px #B2FF59); opacity: 1; }}
+    }}
+    .fidan-efekt {{
+        display: inline-block; font-size: 45px;
+        animation: parlama 1.5s ease-in-out infinite; margin: 15px;
+    }}
     </style>
     """, unsafe_allow_html=True)
+
+# Gelişmiş Efekt Tetikleyicileri (HTML Enjeksiyonu)
+if st.session_state.efekt_turu == "balon":
+    # Ekranın farklı yerlerinden yavaşça yükselecek 6 adet özel animasyonlu balon
+    st.markdown(f"""
+        <div class="balon-efekt" style="left:15%; animation-delay: 0s;">🎈</div>
+        <div class="balon-efekt" style="left:35%; animation-delay: 1.5s; font-size:40px;">🎈</div>
+        <div class="balon-efekt" style="left:55%; animation-delay: 0.5s;">🎈</div>
+        <div class="balon-efekt" style="left:75%; animation-delay: 2s; font-size:35px;">🎈</div>
+        <div class="balon-efekt" style="left:25%; animation-delay: 3s;">🤝</div>
+        <div class="balon-efekt" style="left:65%; animation-delay: 1s; font-size:45px;">❤️</div>
+    """, unsafe_allow_html=True)
+    st.session_state.efekt_turu = None # Döngüyü sıfırla
+
+elif st.session_state.efekt_turu == "fidan":
+    # Yanıp sönen fidan paneli uyarısı
+    st.markdown("""
+        <div style="text-align: center; width: 100%;">
+            <div class="fidan-efekt">🌱</div>
+            <div class="fidan-efekt" style="animation-delay: 0.3s;">🌲</div>
+            <div class="fidan-efekt" style="animation-delay: 0.6s;">🌱</div>
+            <div class="fidan-efekt" style="animation-delay: 0.1s;">🌳</div>
+            <div class="fidan-efekt" style="animation-delay: 0.4s;">🌱</div>
+        </div>
+    """, unsafe_allow_html=True)
+    st.session_state.efekt_turu = None
 
 # ==============================================================================
 # 🔉 BULUT UYUMLU ŞAHİN ASİSTAN SES MOTORU
@@ -144,29 +212,21 @@ with col_left:
 
 with col_right:
     st.markdown('<div class="sahin-card" style="padding:10px;">', unsafe_allow_html=True)
-    
-    # 🌍 image_98f599.png STİLİ: Esri World Imagery Uydu Katmanı Entegrasyonu
     uydu_katmani = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
     m = folium.Map(location=[koordinat['lat'], koordinat['lon']], zoom_start=11, tiles=uydu_katmani, attr="Esri Satellite")
-    
     renk = "red" if risk > 75 else "orange" if risk > 50 else "green"
     
-    # Odak noktasına AFAD benzeri dairesel risk dalgası (Yarıçap) ekleme
     folium.Circle(
         location=[koordinat['lat'], koordinat['lon']],
-        radius=2500,
-        color=renk,
-        fill=True,
-        fill_color=renk,
-        fill_opacity=0.3
+        radius=2500, color=renk, fill=True, fill_color=renk, fill_opacity=0.3
     ).add_to(m)
     
     folium.Marker(location=[koordinat['lat'], koordinat['lon']], popup=f"{ilce_adi} Odak Noktası", icon=folium.Icon(color=renk, icon="fire", prefix="fa")).add_to(m)
-    st_folium(m, width="stretch", height=275)
+    st_folium(m, width="stretch", height=275, key=f"map_{ilce_adi}") # Key eklenerek harita kilitlendi
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
-# 🎮 SEKME YAPISI (TABS) - AFAD SOSYAL SORUMLULUK DAHİL
+# 🎮 SEKME YAPISI (TABS)
 # ==============================================================================
 st.write("---")
 sekme_operasyon, sekme_grafik, sekme_veritabani, sekme_gonullu = st.tabs([
@@ -233,10 +293,10 @@ with sekme_veritabani:
     })
     st.dataframe(df_dummy, width="stretch")
 
-# 4. SEKME: 🌱 image_98f5c0.png ESİNTİLİ SOSYAL SORUMLULUK VE GÖNÜLLÜLÜK PANELİ
+# 4. SEKME: 🌱 DOĞA VE GÖNÜLLÜLÜK PANELİ (ÖZEL ANIMASYONLU SÜRÜM)
 with sekme_gonullu:
     st.markdown("### 💚 Haydi Umut Ol! Doğa ve Gönüllülük Seferberliği")
-    st.write("Yangın tehlikelerine karşı sadece teknolojiyle değil, dayanışmayla da savaşıyoruz. Geleceğe nefes olmak için aşağıdaki kampanyalara katılabilirsiniz.")
+    st.write("Yangın tehlikelerine karşı sadece teknolojiyle değil, dayanışmayla da savaşıyoruz.")
     
     col_card1, col_card2 = st.columns(2)
     
@@ -248,17 +308,20 @@ with sekme_gonullu:
             <p style="font-size:13px; color:#888;"><b>SMS ile Destek:</b> FİDAN yazıp 1866'ya göndererek destek olabilirsiniz.</p>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("🌱 Fidan Bağışı Simülasyonunu Başlat", use_container_width=True):
-            st.balloons()
-            st.success("Tebrikler! Geleceğe nefes olmak adına 1 adet fidan bağışı simüle edildi. 🌱")
+        if st.button("🌱 Fidan Bağışı Yap (Efektli)", use_container_width=True):
+            st.session_state.efekt_turu = "fidan"
+            st.success("Harika! Fidanlar parıldamaya başladı. Çevre bilinciniz için teşekkürler! 🌱")
+            st.rerun()
             
     with col_card2:
         st.markdown(f"""
         <div class="sahin-card" style="border-top: 5px solid #00838F; min-height: 220px;">
             <h4 style="color:#00838F; margin-top:0;">🤝 Bölgesel Doğa ve Yangın Gönüllüsü Ol</h4>
-            <p>Şanlıurfa ve çevresinde olası acil durumlarda ekiplere lojistik ve farkındalık desteği sağlamak için TEMA ve AFAD gönüllü ağına katılın.</p>
+            <p>Şanlıurfa ve çevresinde olası acil durumlarda ekiplere lojistik ve farkındalık desteği sağlamak için gönüllü ağına katılın.</p>
             <p style="font-size:13px; color:#888;">Gönüllü koordinasyon ekipleriyle anlık iletişim kurun.</p>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("🤝 Gönüllü Kayıt Formunu Aç", use_container_width=True):
-            st.info("Harika! Şanlıurfa Yerel Gönüllü Kayıt Simülasyonu Aktif Edildi. Bilgileriniz başarıyla işlendi.")
+        if st.button("🤝 ŞAHİN Gönüllüsü Ol (Yavaş Balonlar)", use_container_width=True):
+            st.session_state.efekt_turu = "balon"
+            st.success("Tebrikler! Gönüllü kaydı alındı, süzülen balonlar eşliğinde hoş geldiniz! 🎈")
+            st.rerun()
