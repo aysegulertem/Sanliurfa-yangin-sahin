@@ -15,171 +15,180 @@ warnings.filterwarnings("ignore")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ==============================================================================
-# 🔉 BULUT UYUMLU, ASENKRON ŞAHİN SES MOTORU (STREAMLIT CLOUD OPTİMİZASYONU)
+# 📱 TEMA VE SIRA DIŞI MOBİL ESTETİK AYARLARI (CSS DÖNÜŞÜMÜ)
+# ==============================================================================
+st.set_page_config(page_title="ŞAHİN Mobil Komuta", layout="wide", initial_sidebar_state="expanded")
+
+# Sol menüde Tema Seçimi
+st.sidebar.markdown("## 🎨 Arayüz Özelleştirme")
+tema = st.sidebar.selectbox("Görünüm Modu Seçin", ["🌃 Siber Koyu (Gece)", "🌅 Canlı Açık (Gündüz)"])
+
+if "Siber Koyu" in tema:
+    bg_color = "#0B0F19"
+    card_bg = "#161B26"
+    text_color = "#E2E8F0"
+    border_color = "#1E293B"
+    accent_gradient = "linear-gradient(135deg, #FF3366, #FF6633)"
+else:
+    bg_color = "#F8FAFC"
+    card_bg = "#FFFFFF"
+    text_color = "#0F172A"
+    border_color = "#E2E8F0"
+    accent_gradient = "linear-gradient(135deg, #00C853, #B2FF59)"
+
+st.markdown(f"""
+    <style>
+    .stApp {{ background-color: {bg_color}; color: {text_color}; }}
+    .sahin-card {{
+        background: {card_bg};
+        border: 1px solid {border_color};
+        border-radius: 20px;
+        padding: 22px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+        margin-bottom: 20px;
+    }}
+    .sahin-avatar-container {{
+        text-align: center;
+        padding: 15px;
+    }}
+    .sahin-icon {{
+        font-size: 65px;
+        background: {accent_gradient};
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        filter: drop-shadow(0px 5px 10px rgba(255,51,102,0.3));
+    }}
+    .neon-text {{
+        font-weight: bold;
+        color: #FF3366;
+    }}
+    </style>
+    """, unsafe_allow_html=True)
+
+# ==============================================================================
+# 🔉 BULUT UYUMLU ŞAHİN ASİSTAN SES MOTORU
 # ==============================================================================
 async def ses_vektörü_üret(metin, dosya_yolu):
-    """Microsoft Edge AI motorunu kullanarak asenkron ses dosyası üretir."""
     VOICE = "tr-TR-AhmetNeural"
     communicator = edge_tts.Communicate(metin, VOICE, rate="+25%")
     await communicator.save(dosya_yolu)
 
 def sahin_seslendir(metin):
-    """ŞAHİN'in yanıtını bulut sunucusunda gecikmesiz ve takılmasız oynatır."""
     try:
-        ses_yolu = os.path.join(BASE_DIR, "sahin_ses.mp3")
-        
-        # Bulut sunucularındaki asenekron döngü karmaşasını önleyen kararlı tetikleyici
-        try:
-            loop = asyncio.get_event_loop()
+        ses_yolu = os.path.join(BASE_DIR, "sahin_asistan.mp3")
+        try: loop = asyncio.get_event_loop()
         except RuntimeError:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            
         loop.run_until_complete(ses_vektörü_üret(metin, ses_yolu))
-
-        # Ses verisini tarayıcıya enjekte etme (Milisaniyelik gecikme önleyici katman)
-        with open(ses_yolu, "rb") as f:
-            ses_bytes = f.read()
+        with open(ses_yolu, "rb") as f: ses_bytes = f.read()
         b64_ses = base64.b64encode(ses_bytes).decode()
-
-        md = f"""
-            <audio autoplay>
-            <source src="data:audio/mp3;base64,{b64_ses}" type="audio/mp3">
-            </audio>
-            """
-        st.markdown(md, unsafe_allow_html=True)
+        st.markdown(f'<audio autoplay><source src="data:audio/mp3;base64,{b64_ses}" type="audio/mp3"></audio>', unsafe_allow_html=True)
     except Exception as e:
-        st.error(f"Ses Sentezleme Hatası: {e}")
+        pass
 
 # ==============================================================================
-# 📊 SAYFA YAPILANDIRMASI VE HAFIZA SİSTEMİ
+# 🗺️ 13 İLÇELİ TAM COĞRAFİ VERİ BANKASI (ŞANLIURFA GLOBAL AĞI)
 # ==============================================================================
-st.set_page_config(page_title="Şanlıurfa Yangın Komuta Merkezi", layout="wide", initial_sidebar_state="expanded")
+ILCELER = {
+    "Karaköprü": {"lat": 37.1950, "lon": 38.8150, "itfaiye": "Karaköprü Merkez İtfaiye Amirliği", "orman_mud": "Şanlıurfa Orman İşletme Müdürlüğü Merkez Ekibi"},
+    "Haliliye": {"lat": 37.1650, "lon": 38.8300, "itfaiye": "Haliliye Acil Müdahale İstasyonu", "orman_mud": "Şanlıurfa Orman İşletme Müdürlüğü Merkez Ekibi"},
+    "Eyyübiye": {"lat": 37.1400, "lon": 38.8000, "itfaiye": "Eyyübiye Sanayi Bölgesi İtfaiyesi", "orman_mud": "Şanlıurfa Orman İşletme Müdürlüğü Merkez Ekibi"},
+    "Akçakale": {"lat": 36.7111, "lon": 38.9469, "itfaiye": "Akçakale Sınır İtfaiye Amirliği", "orman_mud": "Harran Orman Fidanlık Şefliği"},
+    "Birecik": {"lat": 37.0315, "lon": 37.9782, "itfaiye": "Birecik Sahil İtfaiye Grubu", "orman_mud": "Birecik Ağaçlandırma Şefliği Ekibi"},
+    "Bozova": {"lat": 37.3622, "lon": 38.4839, "itfaiye": "Bozova Merkez Müdahale Ekibi", "orman_mud": "Atatürk Barajı Havzası Orman Koruma Şefliği"},
+    "Ceylanpınar": {"lat": 36.8411, "lon": 40.0428, "itfaiye": "Ceylanpınar TİGEM İtfaiye Merkezi", "orman_mud": "Ceylanpınar Orman Koruma Ekibi"},
+    "Halfeti": {"lat": 37.2475, "lon": 37.8697, "itfaiye": "Halfeti Yukarı Kent İtfaiye Müfrezesi", "orman_mud": "Birecik/Halfeti Bölge Orman Şefliği"},
+    "Harran": {"lat": 36.8617, "lon": 39.0306, "itfaiye": "Harran Tarihi Kültür Bölgesi İtfaiyesi", "orman_mud": "Harran Ovası Yeşillendirme Şefliği"},
+    "Hilvan": {"lat": 37.5856, "lon": 38.9592, "itfaiye": "Hilvan Çıkış İstasyonu Müfrezesi", "orman_mud": "Siverek/Hilvan Bölge Orman Ekipleri"},
+    "Siverek": {"lat": 37.7500, "lon": 39.3167, "itfaiye": "Siverek Bölge İtfaiye Amirliği", "orman_mud": "Siverek Orman İşletme Şefliği"},
+    "Suruç": {"lat": 36.9764, "lon": 38.4244, "itfaiye": "Suruç Aligor İtfaiye Grubu", "orman_mud": "Şanlıurfa Merkez Orman Koruma Müfrezesi"},
+    "Viranşehir": {"lat": 37.2353, "lon": 39.7619, "itfaiye": "Viranşehir Organize Sanayi İtfaiyesi", "orman_mud": "Viranşehir Orman Koruma ve Ağaçlandırma Şefliği"}
+}
 
-if "yz_etap" not in st.session_state:
-    st.session_state.yz_etap = 0
-if "aktif_komut" not in st.session_state:
-    st.session_state.aktif_komut = ""
+st_autorefresh(interval=25000, key="sahin_global_refresh")
 
-st.markdown("""
-    <style>
-    .main-title { font-size:32px; font-weight:bold; color:#FF4B4B; text-align:center; margin-bottom:20px; }
-    .metric-box { padding:15px; background-color:#1E1E1E; border-radius:10px; border-left:5px solid #FF4B4B; }
-    .mimar-box { padding:15px; background-color:#111; border-radius:8px; border-left:5px solid #00E676; margin-top:10px; color:#FFF; }
-    </style>
-    """, unsafe_allow_html=True)
-
-st.markdown("<div class='main-title'>🔥 Şanlıurfa Yangın Erken Uyarı Komuta Merkezi</div>", unsafe_allow_html=True)
-
-st_autorefresh(interval=20000, key="yangin_datarefresh")
+# Otomatik Rastgele İlçe ve Yangın Telemetrisi Seçimi
+ilce_adi = list(ILCELER.keys())[int(datetime.now().timestamp()) % len(ILCELER)]
+koordinat = ILCELER[ilce_adi]
 
 np.random.seed(int(datetime.now().timestamp()))
-sicaklik = round(float(np.random.uniform(32.0, 44.0)), 1)
-nem = round(float(np.random.uniform(8.0, 25.0)), 1)
-rüzgar = round(float(np.random.uniform(12.0, 38.0)), 1)
-risk = max(0, min(100, int((sicaklik * 1.6) - nem + (rüzgar * 0.6))))
-son_veri = {"bölge": "Karaköprü / Şanlıurfa", "sicaklik": sicaklik, "nem": nem, "rüzgar": rüzgar, "zaman": datetime.now().strftime("%H:%M:%S")}
+sicaklik = round(float(np.random.uniform(34.0, 46.0)), 1)
+nem = round(float(np.random.uniform(5.0, 20.0)), 1)
+rüzgar = round(float(np.random.uniform(15.0, 45.0)), 1)
+risk = max(0, min(100, int((sicaklik * 1.8) - nem + (rüzgar * 0.7))))
 
 # ==============================================================================
-# 🖥️ ARAYÜZ TASARIMI (METRİKLER VE HARİTA)
+# 📊 ANA MOBİL ARAYÜZ (UX/UI TASARIMI)
 # ==============================================================================
-col1, col2 = st.columns([1, 2])
+col_logo, col_heading = st.columns([1, 4])
+with col_logo:
+    st.markdown('<div class="sahin-avatar-container"><div class="sahin-icon">🦅</div></div>', unsafe_allow_html=True)
+with col_heading:
+    st.markdown(f"<h2 style='margin-top:10px;'>ŞAHİN Akıllı Yapay Zeka Asistanı</h2><p style='color:#aaa;'>Şanlıurfa İl Geneli Gerçek Zamanlı Yangın Algılama ve Otomatik Lojistik Yönlendirme Sistemi</p>", unsafe_allow_html=True)
 
-with col1:
-    st.subheader("📊 Canlı Sensör Verileri")
+col_left, col_right = st.columns([1, 1.5])
+
+with col_left:
     st.markdown(f"""
-    <div class='metric-box'>
-        <p><b>📍 Bölge:</b> {son_veri['bölge']}</p>
-        <p><b>🌡️ Sıcaklık:</b> {son_veri['sicaklik']} °C</p>
-        <p><b>💧 Nem Oranı:</b> %{son_veri['nem']}</p>
-        <p><b>💨 Rüzgar Hızı:</b> {son_veri['rüzgar']} km/s</p>
-        <p><b>⏱️ Son Güncelleme:</b> {son_veri['zaman']}</p>
+    <div class="sahin-card">
+        <h3 style="color:#FF3366; margin-top:0;">📍 Bölgesel Telemetri</h3>
+        <p><b>Aktif Tarama Bölgesi:</b> Şanlıurfa / {ilce_adi}</p>
+        <p><b>Ortam Sıcaklığı:</b> {sicaklik} °C</p>
+        <p><b>Atmosferik Nem:</b> %{nem}</p>
+        <p><b>Rüzgar Şiddeti:</b> {rüzgar} km/s</p>
+        <p style="font-size:12px; color:#777;">Enlem: {koordinat['lat']} | Boylam: {koordinat['lon']}</p>
     </div>
     """, unsafe_allow_html=True)
-    st.write("")
-    st.metric(label="🚨 ŞAHİN Yapay Zeka Yangın Riski", value=f"%{risk}", delta=f"{risk - 50} Sınır Değeri")
+    
+    st.metric(label="📊 Hesaplanan Yapay Zeka Risk İndeksi", value=f"%{risk}", delta="KRİTİK EŞİK" if risk > 70 else "GÜVENLİ")
 
-with col2:
-    st.subheader("🗺️ Bölgesel Risk Analiz Haritası")
-    m = folium.Map(location=[37.1950, 38.8150], zoom_start=13)
-    renk = "red" if risk > 70 else "orange" if risk > 40 else "green"
-    folium.CircleMarker(location=[37.1950, 38.8150], radius=25, popup=f"Karaköprü Risk: %{risk}", color=renk, fill=True, fill_color=renk).add_to(m)
-    st_folium(m, width="stretch", height=300)
-
-# ==============================================================================
-# 🤖 MİMARİ KATMAN: ŞAHİN v2 CLOUD PRODUCTION SÜRÜMÜ
-# ==============================================================================
-st.write("---")
-st.subheader("🧠 Robotik Akıl Yürütme ve Üretim Merkezi (ŞAHİN v2)")
-
-st.markdown("<p style='color: #aaa;'>🎙️ <b>Jüri Özel İletişim Protokolü:</b> ŞAHİN'e telsiz kanalı üzerinden ismiyle hitap ederek sesli komut simülasyonunu başlatın.</p>", unsafe_allow_html=True)
-
-col_t1, col_t2 = st.columns([1, 2])
-with col_t1:
-    st.markdown("**🎙️ Telsiz Mandalını Kullan:**")
-    if st.button("🎚️ BAS-KONUŞ: Ses Kaydını ŞAHİN'e Gönder"):
-        st.session_state.aktif_komut = "ŞAHİN, Karaköprü sensör verilerini analiz et ve üretimi başlat."
-        st.session_state.yz_etap = 1
-
-with col_t2:
-    user_input = st.text_input("Ses Girdisi Görüntüleme Modülü:", value=st.session_state.aktif_komut)
-
-if st.session_state.yz_etap > 0:
-    st.write("")
-    st.markdown("### 🔄 ŞAHİN Bilişsel Mimari Akışı")
-    
-    durum_etiket = "YÜKSEK ALARM" if risk > 65 else "STANDART OPERASYON"
-    isik = "🟢" if risk < 50 else "🟡" if risk < 75 else "🔴"
-    
-    # 1. AŞAMA: ANLAMA
-    st.markdown("#### 📥 1. Aşama: Akıllı Ses ve Niyet Çözümleme (Anlama)")
-    st.info(f"🎤 **Gelen Ses Dalgası Algılandı:** \"{user_input}\"\n\n⚙️ **Niyet Analizi:** Kullanıcı, 'ŞAHİN' kimlik çağrısını kullandı. Karaköprü bölgesi telemetri verileri ve IoT risk motoru hedef alındı.")
-    
-    # 2. AŞAMA: DÜŞÜNME (Siber Tasarım)
-    st.markdown("#### 💭 2. Aşama: Bağıntısal Düşünme ve Eşik Analizi (Düşünme)")
-    
-    siber_log = f"""
-    <div style="background-color: #0b0f19; border: 1px solid #1e293b; border-left: 5px solid #ffbc00; border-radius: 8px; padding: 20px; font-family: 'Courier New', monospace; color: #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.5);">
-        <div style="color: #ffbc00; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #334155; padding-bottom: 5px;">🧠 ŞAHİN HİBRİT BİLİŞSEL MOTORU - AKIL YÜRÜTME LOGU</div>
-        <div style="margin-bottom: 6px;"><span style="color: #38bdf8;">[TELEMETRİ]</span> Bağlantı Durumu: <span style="color: #4ade80;">AKTİF</span> | Hedef Bölge: <span style="color: #fb923c;">Karaköprü / Şanlıurfa</span></div>
-        <div style="margin-bottom: 6px;"><span style="color: #38bdf8;">[VERI_OKUMA]</span> Sıcaklık: <span style="color: #f87171;">{sicaklik}°C</span> (Kritik Eşik: 35.0°C)</div>
-        <div style="margin-bottom: 6px;"><span style="color: #38bdf8;">[VERI_OKUMA]</span> Nem Oranı: <span style="color: #f87171;">%{nem}</span> (Kritik Eşik: %15.0)</div>
-        <div style="margin-bottom: 6px;"><span style="color: #38bdf8;">[VERI_OKUMA]</span> Rüzgar Hızı: <span style="color: #f87171;">{rüzgar} km/s</span> (Kritik Eşik: 25.0 km/s)</div>
-        <div style="margin-bottom: 6px; background-color: #1e293b; padding: 6px; border-radius: 4px; color: #a78bfa;"><span style="color: #c084fc;">[MATRIS_ALGORITMASI]</span> Risk_Formülü = (({sicaklik} × 1.6) - {nem} + ({rüzgar} × 0.6))</div>
-        <div style="margin-bottom: 6px;"><span style="color: #38bdf8;">[MATRIS_CIKTI]</span> Hesaplanan Kompakt Risk Oranı: <span style="color: #ffbc00; font-weight: bold;">%{risk}</span></div>
-        <div style="margin-bottom: 6px;"><span style="color: #38bdf8;">[DURUM_ISIGI]</span> Sistem Güvenlik İndeksi: <span style="font-size: 14px;">{isik} {durum_etiket}</span></div>
-        <div style="margin-top: 10px; border-top: 1px solid #334155; padding-top: 8px; color: #4ade80; font-weight: bold;">🤖 KARAR: Stratejik Eylem Protokolü Tetiklendi. Üretime Geçiliyor...</div>
-    </div>
-    """
-    st.markdown(siber_log, unsafe_allow_html=True)
-    
-    # 3. AŞAMA: ÜRETİM
-    st.markdown("#### 🏭 3. Aşama: Üretim ve Aksiyon Modülü (Üretim)")
-    
-    sahin_yaniti = (
-        f"**🤖 ŞAHİN Yapay Zeka Komuta Çıktısı:**\n\n"
-        f"Komut başarıyla alındı ve anlaşıldı. Karaköprü istasyonu telemetri hatları kontrol edildi.\n\n"
-        f"🔥 **Anlık Risk Seviyesi:** %{risk} | **Sistem Durumu:** {durum_etiket}\n\n"
-        f"**📋 Üretilen Stratejik Aksiyon Maddeleri:**\n"
-        f"1. **IoT Veri Doğrulama:** {sicaklik}°C sıcaklık and %{nem} nem dengesiyle oluşan risk katmanı doğrulanmıştır.\n"
-        f"2. **Lojistik Entegrasyon:** Karaköprü itfaiye yerleşkesindeki operasyon ekipleri mevcut risk oranına göre bilgilendirilmiştir.\n"
-        f"3. **Otomasyon Günlüğü:** Yangın kayıt sistemi (`yangin_gunlugu.txt`) anlık telemetri verileriyle güncellenmiştir."
-    )
-    
-    st.markdown(f"<div class='mimar-box'>{sahin_yaniti.replace('\n', '<br>')}</div>", unsafe_allow_html=True)
-    
-    # ŞAHİN Akıcı Ses Aktivasyonu
-    sahin_seslendir(f"Şahin komutu algıladı. Karaköprü verileri düşünüldü ve işlendi. Yangın riski yüzde {risk}. Üretim protokolü aktif.")
+with col_right:
+    st.markdown('<div class="sahin-card" style="padding:10px;">', unsafe_allow_html=True)
+    m = folium.Map(location=[koordinat['lat'], koordinat['lon']], zoom_start=11, tiles="OpenStreetMap")
+    renk = "red" if risk > 75 else "orange" if risk > 50 else "green"
+    folium.Marker(location=[koordinat['lat'], koordinat['lon']], popup=f"{ilce_adi} Risk Odak Noktası", icon=folium.Icon(color=renk, icon="fire", prefix="fa")).add_to(m)
+    st_folium(m, width="stretch", height=275)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
-# 📋 VERİ TABANI KAYITLARI
+# 🚒 OTOMATİK YÖNLENDİRME & STRATEJİK KOMUTA MERKEZİ
 # ==============================================================================
 st.write("---")
-st.subheader("📋 Sistem Yangın Günlük Kayıtları (Veri Tabanı)")
-df_dummy = pd.DataFrame({
-    "Tarih/Saat": [datetime.now().strftime("%Y-%m-%d %H:%M")],
-    "Bölge": ["Karaköprü"],
-    "Sıcaklık (°C)": [sicaklik],
-    "Risk Seviyesi": [f"%{risk}"]
-})
-st.dataframe(df_dummy, width="stretch")
+st.markdown("### ⚡ Otomatik Akıllı Yönlendirme ve Lojistik Protokolü")
+
+if risk > 75:
+    seviye = "3. DERECE (KRİTİK ACİL DURUM)"
+    afad_durum = "🚨 AFAD KRİZ MASASI OTOMATİK TETİKLENDİ. HAVA DESTEĞİ VE KORDİNASYON PROTOKOLÜ AKTİF."
+    renk_kod = "#D50000"
+elif risk > 50:
+    seviye = "2. DERECE (YÜKSEK ALARM)"
+    afad_durum = "⚪ AFAD Bekleme Modunda (Bölgesel Afet Ekipleri Teyakkuzda)."
+    renk_kod = "#FF6D00"
+else:
+    seviye = "1. DERECE (GÜVENLİ / İZLEME)"
+    afad_durum = "⚪ AFAD Aktivasyonuna Gerek Görülmedi."
+    renk_kod = "#00C853"
+
+st.markdown(f"""
+<div class="sahin-card" style="border-left: 8px solid {renk_kod};">
+    <h4 style="color:{renk_kod}; margin-top:0;">🔥 Yangın Seviyesi: {seviye}</h4>
+    <p><b>🌲 Orman Bölge Müdürlüğü Bildirimi:</b> {koordinat['orman_mud']} lojistik merkezine tam konum ve telemetri verileri aktarıldı. Öncü arazözler sevk edildi.</p>
+    <p><b>🚒 En Yakın İstasyon Sevk Raporu:</b> Yangın odağına en yakın olan <b>{koordinat['itfaiye']}</b> birimleri koordinat doğrultusunda çıkış yaptı.</p>
+    <p><b>🛡️ AFAD Entegrasyon Durumu:</b> {afad_durum}</p>
+</div>
+""", unsafe_allow_html=True)
+
+# ==============================================================================
+# 🎙️ ASİSTAN SES PRODÜKSİYONU
+# ==============================================================================
+if st.button("🎙️ ŞAHİN Asistanı Sesli Dinle"):
+    if risk > 50:
+        konusma = f"Şahine acil durum sinyali ulaştı. {ilce_adi} bölgesinde yangın riski yüzde {risk} olarak ölçüldü. En yakın {koordinat['itfaiye']} birimleri yönlendirildi. Orman bölge müdürlüğüne veri aktarımı tamamlandı."
+        if risk > 75:
+            konusma += " Durum kritik. Afad koordinasyon merkezi entegrasyonu sağlandı."
+    else:
+        konusma = f"Şahine telemetri verisi ulaştı. {ilce_adi} bölgesinde risk yüzde {risk} ile güvenli sınırdadır. İstasyonlar rutine devam ediyor."
+        
+    st.write(f"💬 *ŞAHİN Konuşuyor:* {konusma}")
+    sahin_seslendir(konusma)
