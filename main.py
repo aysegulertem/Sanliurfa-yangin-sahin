@@ -15,11 +15,11 @@ warnings.filterwarnings("ignore")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ==============================================================================
-# 📱 TEMA VE SIRA DIŞI MOBİL ESTETİK AYARLARI (CSS DÖNÜŞÜMÜ)
+# 📱 TEMA VE GELECEK NESİL CSS MİMARİSİ (GLASSMORPHISM & NEON)
 # ==============================================================================
-st.set_page_config(page_title="ŞAHİN Komuta Merkezi v3.0", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="ŞAHİN Komuta Merkezi v3.5", layout="wide", initial_sidebar_state="expanded")
 
-# --- HAFIZA YÖNETİMİ (SESSION STATE) ---
+# Hafıza Yönetimi (Session State)
 if "akis_modu" not in st.session_state:
     st.session_state.akis_modu = "🔄 Otomatik Canlı Simülasyon"
 if "secilen_ilce" not in st.session_state:
@@ -27,12 +27,13 @@ if "secilen_ilce" not in st.session_state:
 if "efekt_turu" not in st.session_state:
     st.session_state.efekt_turu = None
 
-# Sol menü yapılandırması
-st.sidebar.markdown("## 🎨 Arayüz Özelleştirme")
-tema = st.sidebar.selectbox("Görünüm Modu Seçin", ["🌃 Siber Koyu (Gece)", "🌅 Canlı Açık (Gündüz)"])
-
+# Sol Menü Yapılandırması ve Tema Seçimi
+st.sidebar.markdown("<h2 style='text-align:center; color:#00C853; text-shadow: 0 0 10px rgba(0,200,83,0.5);'>🦅 ŞAHİN MENU</h2>", unsafe_allow_html=True)
 st.sidebar.markdown("---")
-st.sidebar.markdown("## 🕹️ Harita Akış Denetimi")
+st.sidebar.markdown("### 🎨 Görünüm")
+tema = st.sidebar.selectbox("Arayüz Modu", ["🌃 Siber Koyu (Gece)", "🌅 Canlı Açık (Gündüz)"])
+
+st.sidebar.markdown("### 🕹️ Akış Denetimi")
 akis_modu_input = st.sidebar.radio(
     "Çalışma Modu", 
     ["🔄 Otomatik Canlı Simülasyon", "📍 Manuel İlçe Seçimi (Sabitle)"],
@@ -57,37 +58,42 @@ ILCELER = {
     "Viranşehir": {"lat": 37.2353, "lon": 39.7619, "itfaiye": "Viranşehir Organize Sanayi İtfaiyesi", "orman_mud": "Viranşehir Orman Koruma ve Ağaçlandırma Şefliği"}
 }
 
-# Akış Kontrolü ve Sabitleme Mekanizması
 if st.session_state.akis_modu == "📍 Manuel İlçe Seçimi (Sabitle)":
     ilce_listesi = list(ILCELER.keys())
     varsayilan_index = ilce_listesi.index(st.session_state.secilen_ilce) if st.session_state.secilen_ilce in ilce_listesi else 0
-    ilce_adi = st.sidebar.selectbox("Hedef İlçe Seçin", ilce_listesi, index=varsayilan_index)
+    ilce_adi = st.sidebar.selectbox("Hedef İlçe", ilce_listesi, index=varsayilan_index)
     st.session_state.secilen_ilce = ilce_adi
 else:
-    # Sadece simülasyon modunda tetiklenir
     st_autorefresh(interval=25000, key="sahin_global_refresh")
     ilce_adi = list(ILCELER.keys())[int(datetime.now().timestamp()) % len(ILCELER)]
     st.session_state.secilen_ilce = ilce_adi
 
 koordinat = ILCELER[ilce_adi]
 
+# Dinamik Tema Renk Atamaları ve Yazı Netleştirme Kontrolü
 if "Siber Koyu" in tema:
     bg_color = "#0B0F19"
     card_bg = "#161B26"
     text_color = "#E2E8F0"
     border_color = "#1E293B"
     accent_gradient = "linear-gradient(135deg, #FF3366, #FF6633)"
+    sidebar_bg = "linear-gradient(180deg, #111827 0%, #0B0F19 100%)"
+    sidebar_border = "1px solid #1E293B"
 else:
     bg_color = "#F8FAFC"
     card_bg = "#FFFFFF"
     text_color = "#0F172A"
     border_color = "#E2E8F0"
     accent_gradient = "linear-gradient(135deg, #00C853, #B2FF59)"
+    sidebar_bg = "linear-gradient(180deg, #FFFFFF 0%, #F1F5F9 100%)"
+    sidebar_border = "1px solid #E2E8F0"
 
-# CSS ANIMASYONLARI (Yavaş balonlar ve yanıp sönen fidanlar)
+# Gelişmiş CSS Enjeksiyonu
 st.markdown(f"""
     <style>
     .stApp {{ background-color: {bg_color}; color: {text_color}; }}
+    
+    /* 🌐 Kart Tasarımları ve Renk Sabitlemesi */
     .sahin-card {{
         background: {card_bg};
         border: 1px solid {border_color};
@@ -95,6 +101,10 @@ st.markdown(f"""
         padding: 22px;
         box-shadow: 0 10px 30px rgba(0,0,0,0.05);
         margin-bottom: 20px;
+        color: {text_color} !important;
+    }}
+    .sahin-card p, .sahin-card h3, .sahin-card h4 {{
+        color: {text_color} !important;
     }}
     .sahin-avatar-container {{ text-align: center; padding: 10px; }}
     .sahin-icon {{
@@ -104,53 +114,41 @@ st.markdown(f"""
         -webkit-text-fill-color: transparent;
     }}
     
-    /* 🎈 Yavaş ve Alttan Yükselen Balon Animasyonu */
-    @keyframes yukselis {{
-        0% {{ transform: translateY(100vh) scale(0.5); opacity: 0; }}
-        10% {{ opacity: 1; }}
-        90% {{ opacity: 1; }}
-        100% {{ transform: translateY(-120vh) scale(1.2); opacity: 0; }}
+    /* 🚀 Gelişmiş Siber Göz Alıcı Sol Menü (Sidebar) */
+    [data-testid="stSidebar"] {{
+        background: {sidebar_bg} !important;
+        border-right: {sidebar_border} !important;
+        box-shadow: 5px 0 25px rgba(0,0,0,0.1);
     }}
-    .balon-efekt {{
-        position: fixed; bottom: -10px; font-size: 30px;
-        animation: yukselis 7s linear infinite; z-index: 9999;
+    [data-testid="stSidebar"] .stSelectbox label, [data-testid="stSidebar"] .stRadio label p {{
+        color: {text_color} !important;
+        font-weight: 600 !important;
     }}
     
-    /* 🌱 Yanıp Sönen Parlayan Fidan Animasyonu */
-    @keyframes parlama {{
-        0%, 100% {{ transform: scale(1); filter: drop-shadow(0 0 2px #00C853); opacity: 0.3; }}
-        50% {{ transform: scale(1.3); filter: drop-shadow(0 0 15px #B2FF59); opacity: 1; }}
+    /* 🌱 Büyüyen ve Yaprak Açan Fidan Animasyonu */
+    @keyframes fidanBuyume {{
+        0% {{ transform: translateY(100vh) scale(0.3); opacity: 0; filter: blur(2px); }}
+        10% {{ opacity: 1; filter: blur(0); }}
+        40% {{ content: "🌱"; transform: translateY(50vh) scale(0.8); }}
+        70% {{ content: "🌿"; transform: translateY(25vh) scale(1.2); }}
+        100% {{ transform: translateY(-20vh) scale(1.6); opacity: 0; }}
     }}
-    .fidan-efekt {{
-        display: inline-block; font-size: 45px;
-        animation: parlama 1.5s ease-in-out infinite; margin: 15px;
+    .fidan-animasyon-kutusu {{
+        position: fixed; bottom: -50px; font-size: 35px;
+        animation: fidanBuyume 6s cubic-bezier(0.25, 1, 0.5, 1) infinite; z-index: 9999;
     }}
     </style>
     """, unsafe_allow_html=True)
 
-# Gelişmiş Efekt Tetikleyicileri (HTML Enjeksiyonu)
-if st.session_state.efekt_turu == "balon":
-    # Ekranın farklı yerlerinden yavaşça yükselecek 6 adet özel animasyonlu balon
-    st.markdown(f"""
-        <div class="balon-efekt" style="left:15%; animation-delay: 0s;">🎈</div>
-        <div class="balon-efekt" style="left:35%; animation-delay: 1.5s; font-size:40px;">🎈</div>
-        <div class="balon-efekt" style="left:55%; animation-delay: 0.5s;">🎈</div>
-        <div class="balon-efekt" style="left:75%; animation-delay: 2s; font-size:35px;">🎈</div>
-        <div class="balon-efekt" style="left:25%; animation-delay: 3s;">🤝</div>
-        <div class="balon-efekt" style="left:65%; animation-delay: 1s; font-size:45px;">❤️</div>
-    """, unsafe_allow_html=True)
-    st.session_state.efekt_turu = None # Döngüyü sıfırla
-
-elif st.session_state.efekt_turu == "fidan":
-    # Yanıp sönen fidan paneli uyarısı
+# Animasyon Tetikleyici Alanı
+if st.session_state.efekt_turu == "doga_seferberligi":
     st.markdown("""
-        <div style="text-align: center; width: 100%;">
-            <div class="fidan-efekt">🌱</div>
-            <div class="fidan-efekt" style="animation-delay: 0.3s;">🌲</div>
-            <div class="fidan-efekt" style="animation-delay: 0.6s;">🌱</div>
-            <div class="fidan-efekt" style="animation-delay: 0.1s;">🌳</div>
-            <div class="fidan-efekt" style="animation-delay: 0.4s;">🌱</div>
-        </div>
+        <div class="fidan-animasyon-kutusu" style="left:10%; animation-delay: 0s;">🌱</div>
+        <div class="fidan-animasyon-kutusu" style="left:25%; animation-delay: 1.2s;">🌱</div>
+        <div class="fidan-animasyon-kutusu" style="left:45%; animation-delay: 0.5s;">🌱</div>
+        <div class="fidan-animasyon-kutusu" style="left:65%; animation-delay: 2s;">🌱</div>
+        <div class="fidan-animasyon-kutusu" style="left:80%; animation-delay: 0.9s;">🌱</div>
+        <div class="fidan-animasyon-kutusu" style="left:90%; animation-delay: 1.5s;">🌱</div>
     """, unsafe_allow_html=True)
     st.session_state.efekt_turu = None
 
@@ -192,7 +190,7 @@ col_logo, col_heading = st.columns([1, 4])
 with col_logo:
     st.markdown('<div class="sahin-avatar-container"><div class="sahin-icon">🦅</div></div>', unsafe_allow_html=True)
 with col_heading:
-    st.markdown(f"<h2 style='margin-top:10px;'>ŞAHİN Akıllı Yapay Zeka Asistanı</h2><p style='color:#aaa;'>Şanlıurfa İl Geneli Gerçek Zamanlı Yangın Algılama ve Otomatik Lojistik Yönlendirme Sistemi</p>", unsafe_allow_html=True)
+    st.markdown(f"<h2>ŞAHİN Akıllı Yapay Zeka Asistanı</h2><p style='color:#aaa;'>Şanlıurfa İl Geneli Gerçek Zamanlı Yangın Algılama ve Otomatik Lojistik Yönlendirme Sistemi</p>", unsafe_allow_html=True)
 
 col_left, col_right = st.columns([1, 1.5])
 
@@ -222,7 +220,7 @@ with col_right:
     ).add_to(m)
     
     folium.Marker(location=[koordinat['lat'], koordinat['lon']], popup=f"{ilce_adi} Odak Noktası", icon=folium.Icon(color=renk, icon="fire", prefix="fa")).add_to(m)
-    st_folium(m, width="stretch", height=275, key=f"map_{ilce_adi}") # Key eklenerek harita kilitlendi
+    st_folium(m, width="stretch", height=275, key=f"map_kilit_{ilce_adi}")
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
@@ -240,11 +238,11 @@ sekme_operasyon, sekme_grafik, sekme_veritabani, sekme_gonullu = st.tabs([
 with sekme_operasyon:
     if risk > 75:
         seviye = "3. DERECE (KRİTİK ACİL DURUM)"
-        afad_durum = "🚨 AFAD KRİZ MASASI OTOMATİK TETİKLENDİ. HAVA DESTEĞİ PROTOKOLÜ AKTİF."
+        afad_durum = "🚨 AFAD KRİZ MASASI OTOMATİK TETİKLENDİ."
         renk_kod = "#D50000"
     elif risk > 50:
         seviye = "2. DERECE (YÜKSEK ALARM)"
-        afad_durum = "⚪ AFAD Bekleme Modunda (Bölgesel Afet Ekipleri Teyakkuzda)."
+        afad_durum = "⚪ AFAD Bekleme Modunda."
         renk_kod = "#FF6D00"
     else:
         seviye = "1. DERECE (GÜVENLİ / İZLEME)"
@@ -254,17 +252,17 @@ with sekme_operasyon:
     st.markdown(f"""
     <div class="sahin-card" style="border-left: 8px solid {renk_kod}; margin-top:10px;">
         <h4 style="color:{renk_kod}; margin-top:0;">🔥 Yangın Seviyesi: {seviye}</h4>
-        <p><b>🌲 Orman Bölge Müdürlüğü Bildirimi:</b> {koordinat['orman_mud']} merkezine konum aktarıldı.</p>
-        <p><b>🚒 En Yakın İstasyon Sevk Raporu:</b> <b>{koordinat['itfaiye']}</b> birimleri çıkış yaptı.</p>
+        <p><b>🌲 Orman Bölge Müdürlüğü Bildirimi:</b> {koordinat['orman_mud']}</p>
+        <p><b>🚒 En Yakın İstasyon Sevk Raporu:</b> <b>{koordinat['itfaiye']}</b></p>
         <p><b>🛡️ AFAD Entegrasyon Durumu:</b> {afad_durum}</p>
     </div>
     """, unsafe_allow_html=True)
 
     col_btn1, col_btn2, col_btn3 = st.columns(3)
     with col_btn1:
-        if st.button("🚨 AFAD Kriz Merkezini Çağır", use_container_width=True): st.success("AFAD hattına veri paketi başarıyla gönderildi!")
+        if st.button("🚨 AFAD Kriz Merkezini Çağır", use_container_width=True): st.success("AFAD hattına veri paketi iletildi!")
     with col_btn2:
-        if st.button("🚒 İtfaiye Rotalarını Çiz", use_container_width=True): st.info(f"{koordinat['itfaiye']} için en hızlı rota oluşturuldu.")
+        if st.button("🚒 İtfaiye Rotalarını Çiz", use_container_width=True): st.info(f"{koordinat['itfaiye']} rotası aktif.")
     with col_btn3:
         if st.button("🎙️ ŞAHİN Asistanı Sesli Dinle", use_container_width=True):
             konusma = f"{ilce_adi} bölgesinde yangın riski yüzde {risk} olarak ölçüldü."
@@ -288,12 +286,11 @@ with sekme_veritabani:
         "Tarih/Saat": [(datetime.now() - timedelta(minutes=i*15)).strftime("%Y-%m-%d %H:%M") for i in range(5)],
         "Bölge / İlçe": [ilce_adi] * 5,
         "Sıcaklık (°C)": [round(sicaklik + np.random.uniform(-2, 2), 1) for _ in range(5)],
-        "Risk Seviyesi": [f"%{max(10, min(100, int(risk + np.random.randint(-15, 15))))}" for _ in range(5)],
-        "Durum Sinyali": ["AKTİF LOG", "ARŞİVLENDİ", "ARŞİVLENDİ", "ARŞİVLENDİ", "ARŞİVLENDİ"]
+        "Risk Seviyesi": [f"%{max(10, min(100, int(risk + np.random.randint(-15, 15))))}" for _ in range(5)]
     })
     st.dataframe(df_dummy, width="stretch")
 
-# 4. SEKME: 🌱 DOĞA VE GÖNÜLLÜLÜK PANELİ (ÖZEL ANIMASYONLU SÜRÜM)
+# 4. SEKME: 🌱 DOĞA VE GÖNÜLLÜLÜK PANELİ (YENİ NESİL CSS FİDAN BÜYÜME EFEKTLİ)
 with sekme_gonullu:
     st.markdown("### 💚 Haydi Umut Ol! Doğa ve Gönüllülük Seferberliği")
     st.write("Yangın tehlikelerine karşı sadece teknolojiyle değil, dayanışmayla da savaşıyoruz.")
@@ -308,9 +305,9 @@ with sekme_gonullu:
             <p style="font-size:13px; color:#888;"><b>SMS ile Destek:</b> FİDAN yazıp 1866'ya göndererek destek olabilirsiniz.</p>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("🌱 Fidan Bağışı Yap (Efektli)", use_container_width=True):
-            st.session_state.efekt_turu = "fidan"
-            st.success("Harika! Fidanlar parıldamaya başladı. Çevre bilinciniz için teşekkürler! 🌱")
+        if st.button("🌱 Fidan Bağışı Yap (Fidanlar Büyüsün)", use_container_width=True):
+            st.session_state.efekt_turu = "doga_seferberligi"
+            st.success("Doğa Seferberliği Başlatıldı! Sürdürülebilir bir gelecek için tohumlar filizleniyor... 🌱🌿🌳")
             st.rerun()
             
     with col_card2:
@@ -321,7 +318,7 @@ with sekme_gonullu:
             <p style="font-size:13px; color:#888;">Gönüllü koordinasyon ekipleriyle anlık iletişim kurun.</p>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("🤝 ŞAHİN Gönüllüsü Ol (Yavaş Balonlar)", use_container_width=True):
-            st.session_state.efekt_turu = "balon"
-            st.success("Tebrikler! Gönüllü kaydı alındı, süzülen balonlar eşliğinde hoş geldiniz! 🎈")
+        if st.button("🤝 ŞAHİN Gönüllüsü Ol (Doğa Aşkına)", use_container_width=True):
+            st.session_state.efekt_turu = "doga_seferberligi"
+            st.success("Harika! Gönüllü kaydınızla birlikte Şanlıurfa topraklarında yeni filizler hayat buluyor! 🌳")
             st.rerun()
