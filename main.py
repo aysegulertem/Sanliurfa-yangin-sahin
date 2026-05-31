@@ -9,7 +9,7 @@ import os
 import asyncio
 import edge_tts
 import base64
-from datetime import datetime
+from datetime import datetime, timedelta
 
 warnings.filterwarnings("ignore")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -17,11 +17,41 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # ==============================================================================
 # 📱 TEMA VE SIRA DIŞI MOBİL ESTETİK AYARLARI (CSS DÖNÜŞÜMÜ)
 # ==============================================================================
-st.set_page_config(page_title="ŞAHİN Mobil Komuta", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="ŞAHİN Komuta Merkezi v2", layout="wide", initial_sidebar_state="expanded")
 
-# Sol menüde Tema Seçimi
+# Sol menü yapılandırması
 st.sidebar.markdown("## 🎨 Arayüz Özelleştirme")
 tema = st.sidebar.selectbox("Görünüm Modu Seçin", ["🌃 Siber Koyu (Gece)", "🌅 Canlı Açık (Gündüz)"])
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("## 🕹️ Harita Akış Denetimi")
+akis_modu = st.sidebar.radio("Çalışma Modu", ["🔄 Otomatik Canlı Simülasyon", "📍 Manuel İlçe Seçimi (Sabitle)"])
+
+# 13 İlçeli Tam Coğrafi Veri Bankası
+ILCELER = {
+    "Karaköprü": {"lat": 37.1950, "lon": 38.8150, "itfaiye": "Karaköprü Merkez İtfaiye Amirliği", "orman_mud": "Şanlıurfa Orman İşletme Müdürlüğü Merkez Ekibi"},
+    "Haliliye": {"lat": 37.1650, "lon": 38.8300, "itfaiye": "Haliliye Acil Müdahale İstasyonu", "orman_mud": "Şanlıurfa Orman İşletme Müdürlüğü Merkez Ekibi"},
+    "Eyyübiye": {"lat": 37.1400, "lon": 38.8000, "itfaiye": "Eyyübiye Sanayi Bölgesi İtfaiyesi", "orman_mud": "Şanlıurfa Orman İşletme Müdürlüğü Merkez Ekibi"},
+    "Akçakale": {"lat": 36.7111, "lon": 38.9469, "itfaiye": "Akçakale Sınır İtfaiye Amirliği", "orman_mud": "Harran Orman Fidanlık Şefliği"},
+    "Birecik": {"lat": 37.0315, "lon": 37.9782, "itfaiye": "Birecik Sahil İtfaiye Grubu", "orman_mud": "Birecik Ağaçlandırma Şefliği Ekibi"},
+    "Bozova": {"lat": 37.3622, "lon": 38.4839, "itfaiye": "Bozova Merkez Müdahale Ekibi", "orman_mud": "Atatürk Barajı Havzası Orman Koruma Şefliği"},
+    "Ceylanpınar": {"lat": 36.8411, "lon": 40.0428, "itfaiye": "Ceylanpınar TİGEM İtfaiye Merkezi", "orman_mud": "Ceylanpınar Orman Koruma Ekibi"},
+    "Halfeti": {"lat": 37.2475, "lon": 37.8697, "itfaiye": "Halfeti Yukarı Kent İtfaiye Müfrezesi", "orman_mud": "Birecik/Halfeti Bölge Orman Şefliği"},
+    "Harran": {"lat": 36.8617, "lon": 39.0306, "itfaiye": "Harran Tarihi Kültür Bölgesi İtfaiyesi", "orman_mud": "Harran Ovası Yeşillendirme Şefliği"},
+    "Hilvan": {"lat": 37.5856, "lon": 38.9592, "itfaiye": "Hilvan Çıkış İstasyonu Müfrezesi", "orman_mud": "Siverek/Hilvan Bölge Orman Ekipleri"},
+    "Siverek": {"lat": 37.7500, "lon": 39.3167, "itfaiye": "Siverek Bölge İtfaiye Amirliği", "orman_mud": "Siverek Orman İşletme Şefliği"},
+    "Suruç": {"lat": 36.9764, "lon": 38.4244, "itfaiye": "Suruç Aligor İtfaiye Grubu", "orman_mud": "Şanlıurfa Merkez Orman Koruma Müfrezesi"},
+    "Viranşehir": {"lat": 37.2353, "lon": 39.7619, "itfaiye": "Viranşehir Organize Sanayi İtfaiyesi", "orman_mud": "Viranşehir Orman Koruma ve Ağaçlandırma Şefliği"}
+}
+
+if akis_modu == "📍 Manuel İlçe Seçimi (Sabitle)":
+    ilce_adi = st.sidebar.selectbox("Hedef İlçe Seçin", list(ILCELER.keys()))
+else:
+    # 25 saniyede bir otomatik yenileme tetikleyici (Sadece simülasyon modunda aktiftir)
+    st_autorefresh(interval=25000, key="sahin_global_refresh")
+    ilce_adi = list(ILCELER.keys())[int(datetime.now().timestamp()) % len(ILCELER)]
+
+koordinat = ILCELER[ilce_adi]
 
 if "Siber Koyu" in tema:
     bg_color = "#0B0F19"
@@ -47,20 +77,12 @@ st.markdown(f"""
         box-shadow: 0 10px 30px rgba(0,0,0,0.05);
         margin-bottom: 20px;
     }}
-    .sahin-avatar-container {{
-        text-align: center;
-        padding: 15px;
-    }}
+    .sahin-avatar-container {{ text-align: center; padding: 10px; }}
     .sahin-icon {{
         font-size: 65px;
         background: {accent_gradient};
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        filter: drop-shadow(0px 5px 10px rgba(255,51,102,0.3));
-    }}
-    .neon-text {{
-        font-weight: bold;
-        color: #FF3366;
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -84,42 +106,21 @@ def sahin_seslendir(metin):
         with open(ses_yolu, "rb") as f: ses_bytes = f.read()
         b64_ses = base64.b64encode(ses_bytes).decode()
         st.markdown(f'<audio autoplay><source src="data:audio/mp3;base64,{b64_ses}" type="audio/mp3"></audio>', unsafe_allow_html=True)
-    except Exception as e:
-        pass
+    except Exception as e: pass
 
-# ==============================================================================
-# 🗺️ 13 İLÇELİ TAM COĞRAFİ VERİ BANKASI (ŞANLIURFA GLOBAL AĞI)
-# ==============================================================================
-ILCELER = {
-    "Karaköprü": {"lat": 37.1950, "lon": 38.8150, "itfaiye": "Karaköprü Merkez İtfaiye Amirliği", "orman_mud": "Şanlıurfa Orman İşletme Müdürlüğü Merkez Ekibi"},
-    "Haliliye": {"lat": 37.1650, "lon": 38.8300, "itfaiye": "Haliliye Acil Müdahale İstasyonu", "orman_mud": "Şanlıurfa Orman İşletme Müdürlüğü Merkez Ekibi"},
-    "Eyyübiye": {"lat": 37.1400, "lon": 38.8000, "itfaiye": "Eyyübiye Sanayi Bölgesi İtfaiyesi", "orman_mud": "Şanlıurfa Orman İşletme Müdürlüğü Merkez Ekibi"},
-    "Akçakale": {"lat": 36.7111, "lon": 38.9469, "itfaiye": "Akçakale Sınır İtfaiye Amirliği", "orman_mud": "Harran Orman Fidanlık Şefliği"},
-    "Birecik": {"lat": 37.0315, "lon": 37.9782, "itfaiye": "Birecik Sahil İtfaiye Grubu", "orman_mud": "Birecik Ağaçlandırma Şefliği Ekibi"},
-    "Bozova": {"lat": 37.3622, "lon": 38.4839, "itfaiye": "Bozova Merkez Müdahale Ekibi", "orman_mud": "Atatürk Barajı Havzası Orman Koruma Şefliği"},
-    "Ceylanpınar": {"lat": 36.8411, "lon": 40.0428, "itfaiye": "Ceylanpınar TİGEM İtfaiye Merkezi", "orman_mud": "Ceylanpınar Orman Koruma Ekibi"},
-    "Halfeti": {"lat": 37.2475, "lon": 37.8697, "itfaiye": "Halfeti Yukarı Kent İtfaiye Müfrezesi", "orman_mud": "Birecik/Halfeti Bölge Orman Şefliği"},
-    "Harran": {"lat": 36.8617, "lon": 39.0306, "itfaiye": "Harran Tarihi Kültür Bölgesi İtfaiyesi", "orman_mud": "Harran Ovası Yeşillendirme Şefliği"},
-    "Hilvan": {"lat": 37.5856, "lon": 38.9592, "itfaiye": "Hilvan Çıkış İstasyonu Müfrezesi", "orman_mud": "Siverek/Hilvan Bölge Orman Ekipleri"},
-    "Siverek": {"lat": 37.7500, "lon": 39.3167, "itfaiye": "Siverek Bölge İtfaiye Amirliği", "orman_mud": "Siverek Orman İşletme Şefliği"},
-    "Suruç": {"lat": 36.9764, "lon": 38.4244, "itfaiye": "Suruç Aligor İtfaiye Grubu", "orman_mud": "Şanlıurfa Merkez Orman Koruma Müfrezesi"},
-    "Viranşehir": {"lat": 37.2353, "lon": 39.7619, "itfaiye": "Viranşehir Organize Sanayi İtfaiyesi", "orman_mud": "Viranşehir Orman Koruma ve Ağaçlandırma Şefliği"}
-}
-
-st_autorefresh(interval=25000, key="sahin_global_refresh")
-
-# Otomatik Rastgele İlçe ve Yangın Telemetrisi Seçimi
-ilce_adi = list(ILCELER.keys())[int(datetime.now().timestamp()) % len(ILCELER)]
-koordinat = ILCELER[ilce_adi]
-
-np.random.seed(int(datetime.now().timestamp()))
+# Telemetri Hesaplama Verileri
+np.random.seed(int(datetime.now().timestamp()) + list(ILCELER.keys()).index(ilce_adi))
 sicaklik = round(float(np.random.uniform(34.0, 46.0)), 1)
 nem = round(float(np.random.uniform(5.0, 20.0)), 1)
 rüzgar = round(float(np.random.uniform(15.0, 45.0)), 1)
 risk = max(0, min(100, int((sicaklik * 1.8) - nem + (rüzgar * 0.7))))
 
+# 🚨 KRİTİK BİLDİRİM MERKEZİ (POP-UP TOAST)
+if risk > 75:
+    st.toast(f"🚨 KRİTİK ALARM: {ilce_adi} bölgesinde risk seviyesi %{risk}! AFAD bilgilendirildi.", icon="🔥")
+
 # ==============================================================================
-# 📊 ANA MOBİL ARAYÜZ (UX/UI TASARIMI)
+# 📊 ANA MOBİL ARAYÜZ ÜST KATMANI
 # ==============================================================================
 col_logo, col_heading = st.columns([1, 4])
 with col_logo:
@@ -141,54 +142,93 @@ with col_left:
     </div>
     """, unsafe_allow_html=True)
     
-    st.metric(label="📊 Hesaplanan Yapay Zeka Risk İndeksi", value=f"%{risk}", delta="KRİTİK EŞİK" if risk > 70 else "GÜVENLİ")
+    st.metric(label="📊 Hesaplanan Yapay Zeka Risk İndeksi", value=f"%{risk}", delta="KRİTİK EŞİK" if risk > 75 else "GÜVENLİ SINIR")
 
 with col_right:
     st.markdown('<div class="sahin-card" style="padding:10px;">', unsafe_allow_html=True)
-    m = folium.Map(location=[koordinat['lat'], koordinat['lon']], zoom_start=11, tiles="OpenStreetMap")
+    m = folium.Map(location=[koordinat['lat'], koordinat['lon']], zoom_start=11)
     renk = "red" if risk > 75 else "orange" if risk > 50 else "green"
     folium.Marker(location=[koordinat['lat'], koordinat['lon']], popup=f"{ilce_adi} Risk Odak Noktası", icon=folium.Icon(color=renk, icon="fire", prefix="fa")).add_to(m)
     st_folium(m, width="stretch", height=275)
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
-# 🚒 OTOMATİK YÖNLENDİRME & STRATEJİK KOMUTA MERKEZİ
+# 🎮 TIKLANABİLİR KONTROL MERKEZİ SEKME YAPISI (TABS)
 # ==============================================================================
 st.write("---")
-st.markdown("### ⚡ Otomatik Akıllı Yönlendirme ve Lojistik Protokolü")
+sekme_operasyon, sekme_grafik, sekme_veritabani = st.tabs([
+    "🚒 ⚡ Canlı Aksiyon Operasyonu", 
+    "📈 Geçmiş Risk Analiz Grafiği", 
+    "📋 Sistem Günlük Kayıtları (Veri Tabanı)"
+])
 
-if risk > 75:
-    seviye = "3. DERECE (KRİTİK ACİL DURUM)"
-    afad_durum = "🚨 AFAD KRİZ MASASI OTOMATİK TETİKLENDİ. HAVA DESTEĞİ VE KORDİNASYON PROTOKOLÜ AKTİF."
-    renk_kod = "#D50000"
-elif risk > 50:
-    seviye = "2. DERECE (YÜKSEK ALARM)"
-    afad_durum = "⚪ AFAD Bekleme Modunda (Bölgesel Afet Ekipleri Teyakkuzda)."
-    renk_kod = "#FF6D00"
-else:
-    seviye = "1. DERECE (GÜVENLİ / İZLEME)"
-    afad_durum = "⚪ AFAD Aktivasyonuna Gerek Görülmedi."
-    renk_kod = "#00C853"
-
-st.markdown(f"""
-<div class="sahin-card" style="border-left: 8px solid {renk_kod};">
-    <h4 style="color:{renk_kod}; margin-top:0;">🔥 Yangın Seviyesi: {seviye}</h4>
-    <p><b>🌲 Orman Bölge Müdürlüğü Bildirimi:</b> {koordinat['orman_mud']} lojistik merkezine tam konum ve telemetri verileri aktarıldı. Öncü arazözler sevk edildi.</p>
-    <p><b>🚒 En Yakın İstasyon Sevk Raporu:</b> Yangın odağına en yakın olan <b>{koordinat['itfaiye']}</b> birimleri koordinat doğrultusunda çıkış yaptı.</p>
-    <p><b>🛡️ AFAD Entegrasyon Durumu:</b> {afad_durum}</p>
-</div>
-""", unsafe_allow_html=True)
-
-# ==============================================================================
-# 🎙️ ASİSTAN SES PRODÜKSİYONU
-# ==============================================================================
-if st.button("🎙️ ŞAHİN Asistanı Sesli Dinle"):
-    if risk > 50:
-        konusma = f"Şahine acil durum sinyali ulaştı. {ilce_adi} bölgesinde yangın riski yüzde {risk} olarak ölçüldü. En yakın {koordinat['itfaiye']} birimleri yönlendirildi. Orman bölge müdürlüğüne veri aktarımı tamamlandı."
-        if risk > 75:
-            konusma += " Durum kritik. Afad koordinasyon merkezi entegrasyonu sağlandı."
+# ------------------------------------------------------------------------------
+# 1. SEKME: CANLI OPERASYON
+# ------------------------------------------------------------------------------
+with sekme_operasyon:
+    if risk > 75:
+        seviye = "3. DERECE (KRİTİK ACİL DURUM)"
+        afad_durum = "🚨 AFAD KRİZ MASASI OTOMATİK TETİKLENDİ. HAVA DESTEĞİ VE KORDİNASYON PROTOKOLÜ AKTİF."
+        renk_kod = "#D50000"
+    elif risk > 50:
+        seviye = "2. DERECE (YÜKSEK ALARM)"
+        afad_durum = "⚪ AFAD Bekleme Modunda (Bölgesel Afet Ekipleri Teyakkuzda)."
+        renk_kod = "#FF6D00"
     else:
-        konusma = f"Şahine telemetri verisi ulaştı. {ilce_adi} bölgesinde risk yüzde {risk} ile güvenli sınırdadır. İstasyonlar rutine devam ediyor."
-        
-    st.write(f"💬 *ŞAHİN Konuşuyor:* {konusma}")
-    sahin_seslendir(konusma)
+        seviye = "1. DERECE (GÜVENLİ / İZLEME)"
+        afad_durum = "⚪ AFAD Aktivasyonuna Gerek Görülmedi."
+        renk_kod = "#00C853"
+
+    st.markdown(f"""
+    <div class="sahin-card" style="border-left: 8px solid {renk_kod}; margin-top:10px;">
+        <h4 style="color:{renk_kod}; margin-top:0;">🔥 Yangın Seviyesi: {seviye}</h4>
+        <p><b>🌲 Orman Bölge Müdürlüğü Bildirimi:</b> {koordinat['orman_mud']} merkezine tam konum aktarıldı. Öncü arazözler sevk edildi.</p>
+        <p><b>🚒 En Yakın İstasyon Sevk Raporu:</b> Yangın odağına en yakın olan <b>{koordinat['itfaiye']}</b> birimleri çıkış yaptı.</p>
+        <p><b>🛡️ AFAD Entegrasyon Durumu:</b> {afad_durum}</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col_btn1, col_btn2, col_btn3 = st.columns(3)
+    with col_btn1:
+        if st.button("🚨 AFAD Kriz Merkezini Çağır", use_container_width=True):
+            st.success("AFAD Kriz Masası hattına güvenli kriptolu veri paketi başarıyla gönderildi!")
+    with col_btn2:
+        if st.button("🚒 İtfaiye Müfrezesine Rota Çiz", use_container_width=True):
+            st.info(f"Google Maps Lojistik API: {koordinat['itfaiye']} için en hızlı rota oluşturuldu.")
+    with col_btn3:
+        if st.button("🎙️ ŞAHİN Asistanı Sesli Dinle", use_container_width=True):
+            if risk > 50:
+                konusma = f"Şahine acil durum sinyali ulaştı. {ilce_adi} bölgesinde yangın riski yüzde {risk} olarak ölçüldü. En yakın {koordinat['itfaiye']} birimleri yönlendirildi."
+            else:
+                konusma = f"Şahine telemetri verisi ulaştı. {ilce_adi} bölgesinde risk yüzde {risk} ile güvenli sınırdadır."
+            sahin_seslendir(konusma)
+
+# ------------------------------------------------------------------------------
+# 2. SEKME: GEÇMİŞ RİSK GRAFİĞİ (GİZLENMİŞ ALAN)
+# ------------------------------------------------------------------------------
+with sekme_grafik:
+    st.markdown(f"#### 📈 {ilce_adi} İlçesi Son 24 Saatlik Risk Değişim Grafiği")
+    saatler = [(datetime.now() - timedelta(hours=i)).strftime("%H:00") for i in range(24, 0, -1)]
+    
+    # Seçilen ilçeye göre tutarlı yapay geçmiş grafik verisi üretme
+    np.random.seed(list(ILCELER.keys()).index(ilce_adi))
+    grafik_verisi = pd.DataFrame({
+        "Saat": saatler,
+        "Yapay Zeka Risk İndeksi (%)": np.random.randint(max(10, risk-30), min(100, risk+20), size=24)
+    }).set_index("Saat")
+    
+    st.line_chart(grafik_verisi, color="#FF3366")
+
+# ------------------------------------------------------------------------------
+# 3. SEKME: VERİ TABANI TABLOSU (GİZLENMİŞ ALAN)
+# ------------------------------------------------------------------------------
+with sekme_veritabani:
+    st.markdown("#### 📋 Sistem Yangın Günlük Kayıtları (Veri Tabanı)")
+    df_dummy = pd.DataFrame({
+        "Tarih/Saat": [(datetime.now() - timedelta(minutes=i*15)).strftime("%Y-%m-%d %H:%M") for i in range(5)],
+        "Bölge / İlçe": [ilce_adi] * 5,
+        "Sıcaklık (°C)": [round(sicaklik + np.random.uniform(-2, 2), 1) for _ in range(5)],
+        "Risk Seviyesi": [f"%{max(10, min(100, int(risk + np.random.randint(-15, 15))))}" for _ in range(5)],
+        "Durum Sinyali": ["AKTİF LOG", "ARŞİVLENDİ", "ARŞİVLENDİ", "ARŞİVLENDİ", "ARŞİVLENDİ"]
+    })
+    st.dataframe(df_dummy, width="stretch")
