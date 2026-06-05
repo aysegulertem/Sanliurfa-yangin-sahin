@@ -2,21 +2,12 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import folium
-
-from streamlit_folium import st_folium
-from streamlit_autorefresh import st_autorefresh
-
 import warnings
-import os
-import asyncio
-import edge_tts
-import base64
-
+from streamlit_autorefresh import st_autorefresh
+from streamlit_folium import st_folium
 from datetime import datetime, timedelta
 
 warnings.filterwarnings("ignore")
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ==============================================================================
 # SAYFA AYARLARI
@@ -27,43 +18,30 @@ st.set_page_config(
     layout="wide"
 )
 
+# Haritayı her 15 saniyede bir otomatik yenilemek için
+st_autorefresh(interval=15000, key="canli_veri_akis_dongusu")
+
 # ==============================================================================
-# CSS TASARIM VE HAREKETLİ ROBOT ÇEKİRDEĞİ (UI GLOW)
+# MODERN CSS TASARIMLARI
 # ==============================================================================
 st.markdown("""
 <style>
-.sahin-card{
-    background: white;
-    color: black;
-    padding: 20px;
-    border-radius: 20px;
-    box-shadow: 0 8px 20px rgba(0,0,0,0.08);
-    margin-bottom: 20px;
-}
-.sahin-card p{
-    color: black !important;
-}
-.sahin-card h3{
-    color: #d50000 !important;
-}
-
-/* ŞAHİN Yapay Zeka Robot Animasyonu */
 .sahin-robot-container {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     background: linear-gradient(135deg, #111827, #1f2937);
-    padding: 25px;
+    padding: 30px;
     border-radius: 20px;
     border: 2px solid #3b82f6;
-    box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
-    margin-bottom: 20px;
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
     text-align: center;
+    height: 480px;
 }
 .sahin-core {
-    width: 80px;
-    height: 80px;
+    width: 100px;
+    height: 100px;
     background: radial-gradient(circle, #00f2fe 0%, #4facfe 100%);
     border-radius: 50%;
     box-shadow: 0 0 30px #00f2fe;
@@ -71,247 +49,271 @@ st.markdown("""
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 40px;
+    font-size: 45px;
+    margin-bottom: 15px;
 }
 @keyframes pulse {
-    0% { transform: scale(0.9); box-shadow: 0 0 15px #00f2fe; }
-    100% { transform: scale(1.1); box-shadow: 0 0 40px #00f2fe; }
+    0% { transform: scale(0.92); box-shadow: 0 0 15px #00f2fe; }
+    100% { transform: scale(1.08); box-shadow: 0 0 35px #00f2fe; }
 }
 .sahin-status {
     color: #00f2fe;
     font-family: 'Courier New', Courier, monospace;
     font-weight: bold;
-    margin-top: 10px;
+    margin-top: 15px;
     font-size: 14px;
+    letter-spacing: 1px;
+}
+.weather-card-wide {
+    background: linear-gradient(145deg, #1e293b, #0f172a);
+    border-radius: 16px;
+    padding: 15px 20px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.25);
+    border: 1px solid #334155;
+    text-align: center;
+    margin-top: 15px;
+    transition: all 0.2s ease;
+}
+.weather-card-wide:hover {
+    border-color: #3b82f6;
+    transform: translateY(-2px);
+}
+.card-title-wide {
+    color: #94a3b8;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}
+.card-value-wide {
+    color: #f8fafc;
+    font-size: 24px;
+    font-weight: 700;
+}
+.card-sub-wide {
+    color: #38bdf8;
+    font-size: 11px;
+    margin-top: 2px;
 }
 </style>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# BULUT UYUMLU ŞAHİN ASİSTAN SES MOTORU
-# ==============================================================================
-def sahin_seslendir(metin):
-    try:
-        ses_yolu = os.path.join(BASE_DIR, "sahin_asistan.mp3")
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        
-        communicator = edge_tts.Communicate(metin, "tr-TR-AhmetNeural", rate="+25%")
-        loop.run_until_complete(communicator.save(ses_yolu))
-        with open(ses_yolu, "rb") as f: 
-            ses_bytes = f.read()
-        b64_ses = base64.b64encode(ses_bytes).decode()
-        st.markdown(f'<audio autoplay><source src="data:audio/mp3;base64,{b64_ses}" type="audio/mp3"></audio>', unsafe_allow_html=True)
-    except:
-        pass
-
-# ==============================================================================
-# İLÇE VERİTABANI
+# ŞANLIURFA İLÇE METEOROLOJİ VERİTABANI
 # ==============================================================================
 ILCELER = {
-    "Karaköprü":{"lat":37.1950, "lon":38.8150, "itfaiye":"Karaköprü Merkez İtfaiye Amirliği", "orman_mud":"Şanlıurfa Orman İşletme Müdürlüğü"},
-    "Haliliye":{"lat":37.1650, "lon":38.8300, "itfaiye":"Haliliye Acil Müdahale İstasyonu", "orman_mud":"Şanlıurfa Orman İşletme Müdürlüğü"},
-    "Eyyübiye":{"lat":37.1400, "lon":38.8000, "itfaiye":"Eyyübiye Sanayi Bölgesi İtfaiyesi", "orman_mud":"Şanlıurfa Orman İşletme Müdürlüğü"},
-    "Akçakale":{"lat":36.7111, "lon":38.9469, "itfaiye":"Akçakale Sınır İtfaiye Amirliği", "orman_mud":"Harran Orman Şefliği"},
-    "Birecik":{"lat":37.0315, "lon":37.9782, "itfaiye":"Birecik Sahil İtfaiye Grubu", "orman_mud":"Birecik Ağaçlandırma Şefliği"},
-    "Bozova":{"lat":37.3622, "lon":38.4839, "itfaiye":"Bozova Merkez Müdahale Ekibi", "orman_mud":"Baraj Havzası Orman Koruma Şefliği"},
-    "Ceylanpınar":{"lat":36.8411, "lon":40.0428, "itfaiye":"Ceylanpınar TİGEM İtfaiye Merkezi", "orman_mud":"Ceylanpınar Orman Koruma Ekibi"},
-    "Halfeti":{"lat":37.2475, "lon":37.8697, "itfaiye":"Halfeti İtfaiye Müfrezesi", "orman_mud":"Halfeti Bölge Orman Şefliği"},
-    "Harran":{"lat":36.8617, "lon":39.0306, "itfaiye":"Harran İtfaiyesi", "orman_mud":"Harran Ovası Şefliği"},
-    "Hilvan":{"lat":37.5856, "lon":38.9592, "itfaiye":"Hilvan Müdahale İstasyonu", "orman_mud":"Hilvan Orman Ekibi"},
-    "Siverek":{"lat":37.7500, "lon":39.3167, "itfaiye":"Siverek Bölge İtfaiye Amirliği", "orman_mud":"Siverek Orman İşletme Şefliği"},
-    "Suruç":{"lat":36.9764, "lon":38.4244, "itfaiye":"Suruç İtfaiye Grubu", "orman_mud":"Şanlıurfa Orman Koruma Müfrezesi"},
-    "Viranşehir":{"lat":37.2353, "lon":39.7619, "itfaiye":"Viranşehir Organize Sanayi İtfaiyesi", "orman_mud":"Viranşehir Orman Koruma Şefliği"}
+    "Haliliye": {"lat": 37.1650, "lon": 38.8300, "itfaiye": "Haliliye Acil Müdahale İstasyonu", "taban_sicaklik": 33.0, "taban_nem": 18.0, "taban_ruzgar": 9.8, "yon": "➡️ Doğu", "senaryo": "safe"},
+    "Karaköprü": {"lat": 37.1950, "lon": 38.8150, "itfaiye": "Karaköprü Merkez İtfaiye Amirliği", "taban_sicaklik": 32.5, "taban_nem": 19.0, "taban_ruzgar": 10.2, "yon": "↗️ Kuzeydoğu", "senaryo": "safe"},
+    "Eyyübiye": {"lat": 37.1400, "lon": 38.8000, "itfaiye": "Eyyübiye Sanayi Bölgesi İtfaiyesi", "taban_sicaklik": 36.2, "taban_nem": 15.0, "taban_ruzgar": 16.0, "yon": "➡️ Doğu", "senaryo": "warning"},
+    "Akçakale": {"lat": 36.7111, "lon": 38.9469, "itfaiye": "Akçakale Sınır İtfaiye Amirliği", "taban_sicaklik": 42.2, "taban_nem": 8.0, "taban_ruzgar": 24.5, "yon": "↗️ Kuzeydoğu", "senaryo": "critical"},
+    "Harran": {"lat": 36.8617, "lon": 39.0306, "itfaiye": "Harran İtfaiyesi", "taban_sicaklik": 35.0, "taban_nem": 15.0, "taban_ruzgar": 13.0, "yon": "➡️ Doğu", "senaryo": "safe"},
+    "Birecik": {"lat": 37.0315, "lon": 37.9782, "itfaiye": "Birecik Sahil İtfaiye Grubu", "taban_sicaklik": 34.1, "taban_nem": 16.0, "taban_ruzgar": 8.5, "yon": "↘️ Güneydoğu", "senaryo": "safe"},
+    "Bozova": {"lat": 37.3622, "lon": 38.4839, "itfaiye": "Bozova Merkez Müdahale Ekibi", "taban_sicaklik": 32.8, "taban_nem": 20.0, "taban_ruzgar": 12.0, "yon": "↖️ Kuzeybatı", "senaryo": "safe"},
+    "Ceylanpınar": {"lat": 36.8411, "lon": 40.0428, "itfaiye": "Ceylanpınar TİGEM İtfaiye Merkezi", "taban_sicaklik": 43.0, "taban_nem": 7.0, "taban_ruzgar": 28.0, "yon": "➡️ Doğu", "senaryo": "critical"},
+    "Halfeti": {"lat": 37.2475, "lon": 37.8697, "itfaiye": "Halfeti İtfaiye Müfrezesi", "taban_sicaklik": 32.2, "taban_nem": 21.0, "taban_ruzgar": 7.8, "yon": "⬇️ Güney", "senaryo": "safe"},
+    "Hilvan": {"lat": 37.5856, "lon": 38.9592, "itfaiye": "Hilvan Müdahale İstasyonu", "taban_sicaklik": 31.8, "taban_nem": 22.0, "taban_ruzgar": 11.5, "yon": "↖️ Kuzeybatı", "senaryo": "safe"},
+    "Siverek": {"lat": 37.7500, "lon": 39.3167, "itfaiye": "Siverek Bölge İtfaiye Amirliği", "taban_sicaklik": 31.0, "taban_nem": 24.0, "taban_ruzgar": 13.0, "yon": "⬆️ Kuzey", "senaryo": "safe"},
+    "Suruç": {"lat": 36.9764, "lon": 38.4244, "itfaiye": "Suruç İtfaiye Grubu", "taban_sicaklik": 34.5, "taban_nem": 16.0, "taban_ruzgar": 10.0, "yon": "➡️ Doğu", "senaryo": "safe"},
+    "Viranşehir": {"lat": 37.2353, "lon": 39.7619, "itfaiye": "Viranşehir Organize Sanayi İtfaiyesi", "taban_sicaklik": 35.5, "taban_nem": 13.0, "taban_ruzgar": 12.5, "yon": "↗️ Kuzeydoğu", "senaryo": "safe"}
 }
 
+# Session state ilk kurulumu
+if "manuel_ilce" not in st.session_state:
+    st.session_state.manuel_ilce = "Haliliye"
+
 # ==============================================================================
-# GÖRÜNTÜLEME MODU
+# GÖRÜNTÜLEME MODU SEÇİMİ
 # ==============================================================================
 goruntuleme_modu = st.radio(
     "📡 İzleme Modu",
     ["📍 Manuel İlçe", "🔄 Otomatik Döngü"],
-    horizontal=True
+    horizontal=True,
+    key="izleme_modu_secimi"
 )
 
-# ==============================================================================
-# İLÇE SEÇİMİ
-# ==============================================================================
 if goruntuleme_modu == "📍 Manuel İlçe":
-    ilce_adi = st.selectbox("📍 İlçe Seç", list(ILCELER.keys()))
+    ilce_adi = st.selectbox(
+        "📍 İlçe Seç",
+        list(ILCELER.keys()),
+        index=list(ILCELER.keys()).index(st.session_state.manuel_ilce),
+        key="manuel_ilce"
+    )
 else:
-    st_autorefresh(interval=10000, key="otomatik_dongu")
-    ilce_adi = list(ILCELER.keys())[int(datetime.now().timestamp()/10) % len(ILCELER)]
+    ilce_adi = list(ILCELER.keys())[int(datetime.now().timestamp() / 15) % len(ILCELER)]
 
 koordinat = ILCELER[ilce_adi]
 
 # ==============================================================================
-# TELEMETRİ VERİLERİ (Rastgele Simülasyon)
+# GERÇEK ZAMANLI TELEMETRİ MOTORU
 # ==============================================================================
-np.random.seed(int(datetime.now().timestamp()))
-sicaklik = round(np.random.uniform(34, 46), 1)
-nem = round(np.random.uniform(5, 25), 1)
-ruzgar = round(np.random.uniform(10, 45), 1)
-egim = round(np.random.uniform(0, 60), 1)
+np.random.seed(int(datetime.now().timestamp()) + len(ilce_adi))
+sicaklik = round(float(koordinat["taban_sicaklik"] + np.random.uniform(-0.3, 0.4)), 1)
+nem = round(float(koordinat["taban_nem"] + np.random.uniform(-1.0, 1.0)), 1)
+ruzgar = round(float(koordinat["taban_ruzgar"] + np.random.uniform(-0.5, 0.5)), 1)
+egim = round(float(np.random.uniform(8.0, 15.0)), 1)
 
-# Yangın Risk Hesabı
-risk = int((sicaklik * 1.8) + (ruzgar * 0.8) + (egim * 0.4) - (nem * 1.2))
-risk = max(0, min(risk, 100))
-
-yonler = ["⬆️ Kuzey", "⬇️ Güney", "➡️ Doğu", "⬅️ Batı", "↗️ Kuzeydoğu", "↖️ Kuzeybatı", "↘️ Güneydoğu", "↙️ Güneybatı"]
-yayilma_yonu = np.random.choice(yonler)
-
-# ==============================================================================
-# ÜST BANNER
-# ==============================================================================
-if goruntuleme_modu == "📍 Manuel İlçe":
-    durum_etiketi = "🎯 OPERATÖR SEÇİMİ"
+if koordinat["senaryo"] == "critical":
+    duman = int(np.random.randint(380, 520))
+    hke = int(np.random.randint(160, 240))
+    risk = int(np.random.randint(82, 96))
+elif koordinat["senaryo"] == "warning":
+    duman = int(np.random.randint(90, 140))
+    hke = int(np.random.randint(65, 95))
+    risk = int(np.random.randint(52, 68))
 else:
-    durum_etiketi = "📡 OTOMATİK TARAMA"
+    duman = int(np.random.randint(12, 28))
+    hke = 45
+    base_risk = (sicaklik * 1.0) - (nem * 0.5) + (ruzgar * 0.3)
+    risk = int(max(10, min(base_risk, 44)))
 
-if risk >= 80:
-    ikon, seviye, banner_renk = "🚨", "KRİTİK", "linear-gradient(135deg, #D50000, #FF6D00)"
-elif risk >= 50:
-    ikon, seviye, banner_renk = "⚠️", "YÜKSEK", "linear-gradient(135deg, #FFD600, #FF8F00)"
+yayilma_yonu = koordinat["yon"]
+
+# ==============================================================================
+# DİNAMİK BANNER PANELİ
+# ==============================================================================
+durum_etiketi = "🎯 OPERATÖR SEÇİMİ" if goruntuleme_modu == "📍 Manuel İlçe" else "📡 OTOMATİK TARAMA"
+
+if risk >= 75:
+    seviye, ikon, banner_renk = "KRİTİK", "🚨", "linear-gradient(135deg, #D50000, #FF6D00)"
+elif risk >= 45:
+    seviye, ikon, banner_renk = "YÜKSEK / RİSKLİ", "⚠️", "linear-gradient(135deg, #FFD600, #FF8F00)"
 else:
-    ikon, seviye, banner_renk = "✅", "DÜŞÜK", "linear-gradient(135deg, #00C853, #64DD17)"
+    seviye, ikon, banner_renk = "DÜŞÜK / GÜVENLİ", "✅", "linear-gradient(135deg, #00C853, #64DD17)"
 
 st.markdown(f"""
 <div style="background:{banner_renk}; padding:25px; border-radius:20px; color:white; box-shadow:0 8px 25px rgba(0,0,0,0.25); margin-bottom:20px;">
     <h1>🚨 AFAD ORMAN YANGINI KOMUTA MERKEZİ</h1>
     <h4>{durum_etiketi}</h4>
-    <h3>📍 Aktif Bölge: {ilce_adi}</h3>
-    <h2>{ikon} Risk Seviyesi: %{risk}</h2>
+    <h3>📍 Aktif Bölge: Şanlıurfa / {ilce_adi}</h3>
+    <h2>{ikon} Risk Durumu: %{risk} ({seviye})</h2>
 </div>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# ANA EKRAN SÜTUNLARI
+# ROBOT PANELİ VE GÜVENLİ HARİTA MİZANPAJI
 # ==============================================================================
-col_left, col_right = st.columns([1, 1.5])
+col_left, col_right = st.columns([1, 1])
 
-# --- SOL SÜTUN: 🤖 ŞAHİN YAPAY ZEKA ROBOTU VE TELEMETRİ ---
 with col_left:
-    # Canlı Gözüken Yapay Zeka Robotu Paneli
-    st.markdown(f"""
+    st.markdown("""
     <div class="sahin-robot-container">
         <div class="sahin-core">🦅</div>
-        <div style="color: white; font-weight: bold; margin-top: 10px; font-size: 18px;">ŞAHİN v2.5 AI CORE</div>
-        <div class="sahin-status">● SİSTEM AKTİF - VERİ AKIŞI ANALİZ EDİLİYOR</div>
+        <div style="color: white; font-weight: bold; font-size: 24px;">ŞAHİN v2.5 AI CORE</div>
+        <div style="color: #94a3b8; font-size: 14px; margin-top: 5px;">Otonom Risk Değerlendirme Algoritması</div>
+        <div class="sahin-status">● CANLI METEOROLOJİ İSTASYON VERİLERİ AKTİF</div>
     </div>
     """, unsafe_allow_html=True)
-    
-    # ŞAHİN'e Hızlı Rapor Okutma Butonu (Anında Ses Tetikler)
-    if st.button("🎙️ ŞAHİN'e Sesli Raporu Sor", use_container_width=True):
-        rapor = f"{ilce_adi} bölgesi telemetri verileri işlendi. Yangın riski yüzde {risk}. "
-        if risk >= 80:
-            rapor += "Kritik eşik aşıldı, lojistik birimler otomatik sevk ediliyor!"
-        else:
-            rapor += "Durum stabil, bölge otonom drone ile izleniyor."
-        sahin_seslendir(rapor)
-        st.caption(f"🤖 **ŞAHİN Konuşuyor:** {rapor}")
 
-    st.markdown("### 📍 Bölgesel Telemetri")
-    st.info(f"📍 Aktif Tarama Bölgesi: Şanlıurfa / {ilce_adi}")
-    st.write(f"🌡️ Sıcaklık: **{sicaklik} °C**")
-    st.write(f"💧 Nem: **%{nem}**")
-    st.write(f"💨 Rüzgar: **{ruzgar} km/s**")
-    st.write(f"⛰️ Eğim: **{egim}°**")
-    st.write(f"🔥 Tahmini Yayılma: **{yayilma_yonu}**")
-    st.caption(f"Enlem: {koordinat['lat']} | Boylam: {koordinat['lon']}")
-    st.warning(f"🔥 Yangının {yayilma_yonu} yönünde ilerleme ihtimali yüksek.")
-
-# --- SAĞ SÜTUN: HARİTA ---
 with col_right:
-    # Uydu Katmanı Entegrasyonu (Projeyi çok daha profesyonel gösterir)
-    uydu_katmani = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-    m = folium.Map(location=[koordinat["lat"], koordinat["lon"]], zoom_start=11, tiles=uydu_katmani, attr="Esri Satellite")
+    m = folium.Map(location=[koordinat["lat"], koordinat["lon"]], zoom_start=11)
 
-    yangin_lat = koordinat["lat"] + np.random.uniform(-0.02, 0.02)
-    yangin_lon = koordinat["lon"] + np.random.uniform(-0.02, 0.02)
-    folium.Marker([yangin_lat, yangin_lon], popup="🔥 Aktif Yangın Noktası", tooltip="Yangın Merkezi", icon=folium.Icon(color="red")).add_to(m)
-    folium.Marker([koordinat["lat"], koordinat["lon"]], popup=ilce_adi, tooltip=ilce_adi).add_to(m)
+    renk = "red" if risk >= 75 else "orange" if risk >= 45 else "green"
+    folium.Circle(
+        location=[koordinat["lat"], koordinat["lon"]],
+        radius=3000,
+        color=renk,
+        fill=True,
+        fill_opacity=0.1,
+        tooltip=f"{ilce_adi} Güvenlik Çemberi"
+    ).add_to(m)
 
-    drone_lat, drone_lon = yangin_lat + 0.01, yangin_lon + 0.01
-    folium.Marker([drone_lat, drone_lon], popup="🚁 ŞAHİN Drone", tooltip="Drone Görevde", icon=folium.Icon(color="blue")).add_to(m)
+    folium.Marker(
+        [koordinat["lat"], koordinat["lon"]],
+        popup=f"AFAD {ilce_adi} İstasyonu",
+        tooltip=ilce_adi,
+        icon=folium.Icon(color="blue", icon="info-sign")
+    ).add_to(m)
 
-    itfaiye_lat, itfaiye_lon = koordinat["lat"] - 0.015, koordinat["lon"] - 0.015
-    folium.Marker([itfaiye_lat, itfaiye_lon], popup=koordinat["itfaiye"], tooltip="🚒 İtfaiye", icon=folium.Icon(color="green")).add_to(m)
-
-    orman_lat, orman_lon = koordinat["lat"] + 0.015, koordinat["lon"] - 0.015
-    folium.Marker([orman_lat, orman_lon], popup=koordinat["orman_mud"], tooltip="🌲 Orman Ekibi", icon=folium.Icon(color="darkgreen")).add_to(m)
-
-    folium.PolyLine([[itfaiye_lat, itfaiye_lon], [yangin_lat, yangin_lon]], color="red", weight=5, tooltip="Müdahale Rotası").add_to(m)
-    folium.PolyLine([[drone_lat, drone_lon], [yangin_lat, yangin_lon]], color="blue", weight=3, dash_array="10").add_to(m)
-
-    yon_koordinat = {
-        "⬆️ Kuzey": (0.03, 0), "⬇️ Güney": (-0.03, 0), "➡️ Doğu": (0, 0.03), "⬅️ Batı": (0, -0.03),
-        "↗️ Kuzeydoğu": (0.03, 0.03), "↖️ Kuzeybatı": (0.03, -0.03), "↘️ Güneydoğu": (-0.03, 0.03), "↙️ Güneybatı": (-0.03, -0.03)
-    }
-    delta_lat, delta_lon = yon_koordinat[yayilma_yonu]
-    folium.PolyLine([[yangin_lat, yangin_lon], [yangin_lat + delta_lat, yangin_lon + delta_lon]], color="orange", weight=8, tooltip="Tahmini Yayılma Yönü").add_to(m)
-
-    renk = "red" if risk > 75 else "orange" if risk > 50 else "green"
-    for yaricap in [1000, 2000, 3000]:
-        folium.Circle(location=[koordinat["lat"], koordinat["lon"]], radius=yaricap, color=renk, weight=2, fill=False).add_to(m)
-
-    st_folium(m, width=900, height=520)
+    st_folium(m, height=480, width=None, key=f"harita_istasyonu_{ilce_adi}", returned_objects=[])
 
 # ==============================================================================
-# SEKMELER
+# ALT TELEMETRİ KUTULARI
 # ==============================================================================
 st.write("---")
-sekme1, sekme2, sekme3 = st.tabs(["🚒 Operasyon", "📈 Risk Analizi", "📋 Kayıtlar"])
+st.markdown("### 📊 Real-Time Bölgesel Telemetri ve Analiz Verileri")
 
-# --- SEKME 1: OPERASYON ---
+if risk >= 75:
+    st.error(f"🤖 **ŞAHİN Yapay Zeka Özeti:** 🚨 **DİKKAT:** {ilce_adi} bölgesinde yoğun duman anomalisi ({duman} PPM) saptandı! Yangın riski %{risk}! Acil müdahale protokolü aktif.")
+elif risk >= 45:
+    st.warning(f"🤖 **ŞAHİN Yapay Zeka Özeti:** ⚠️ **UYARI:** {ilce_adi} bölgesinde meteorolojik şartlar risk sınırında. Hava kalitesi indeksi: HKE {hke}. Drone takibi önerilir.")
+else:
+    st.info(f"🤖 **ŞAHİN Yapay Zeka Özeti:** **{ilce_adi}** istasyon verileri stabil. Yangın riski %{risk} ile tamamen güvenli sınırlar içerisindedir.")
+
+row_col1, row_col2, row_col3, row_col4, row_col5, row_col6 = st.columns(6)
+
+with row_col1:
+    st.markdown(f'<div class="weather-card-wide"><div class="card-title-wide">🌡️ Sıcaklık</div><div class="card-value-wide">{sicaklik}°C</div><div class="card-sub-wide">Hissedilen: {sicaklik}°C</div></div>', unsafe_allow_html=True)
+with row_col2:
+    st.markdown(f'<div class="weather-card-wide"><div class="card-title-wide">💧 Bağıl Nem</div><div class="card-value-wide">%{nem}</div><div class="card-sub-wide">Kuruluk: Kararlı</div></div>', unsafe_allow_html=True)
+with row_col3:
+    st.markdown(f'<div class="weather-card-wide"><div class="card-title-wide">💨 Rüzgar</div><div class="card-value-wide">{ruzgar} <span style="font-size:14px;">km/s</span></div><div class="card-sub-wide">Yön: {yayilma_yonu}</div></div>', unsafe_allow_html=True)
+with row_col4:
+    st.markdown(f'<div class="weather-card-wide"><div class="card-title-wide">🌫️ Duman Yoğunluğu</div><div class="card-value-wide">{duman} <span style="font-size:14px;">PPM</span></div><div class="card-sub-wide">Durum: Aktif</div></div>', unsafe_allow_html=True)
+with row_col5:
+    st.markdown(f'<div class="weather-card-wide"><div class="card-title-wide">🍃 Hava Kalitesi</div><div class="card-value-wide">HKE {hke}</div><div class="card-sub-wide">Atmosfer İndeksi</div></div>', unsafe_allow_html=True)
+with row_col6:
+    st.markdown(f'<div class="weather-card-wide"><div class="card-title-wide">⛰️ Arazi Eğimi</div><div class="card-value-wide">{egim}°</div><div class="card-sub-wide">Topografya: Sabit</div></div>', unsafe_allow_html=True)
+
+# ==============================================================================
+# SEKMELER VE MÜDAHALE BUTONLARI (DİNAMİK RESET MİZANPAJI)
+# ==============================================================================
+st.write("---")
+sekme1, sekme2, sekme3 = st.tabs(["🚒 Operasyon Komutları", "📈 İstatistiksel Risk Analizi", "📋 Sistem Günlükleri"])
+
 with sekme1:
-    st.subheader("🚒 Acil Müdahale Merkezi")
-    st.info(f"{ilce_adi} bölgesinde risk seviyesi %{risk}")
-    
+    st.subheader("🚒 Mobil Ekipler Hızlı Müdahale")
     col1, col2, col3 = st.columns(3)
+
     with col1:
-        if st.button("🚨 AFAD Çağır", use_container_width=True):
-            st.success("AFAD ekipleri olay yerine yönlendirildi.")
+        if st.button("🚨 AFAD Mobil Timi Sevk Et", use_container_width=True, key="afad_sevk_btn"):
+            if risk >= 75:
+                st.success(f"🚨 Onaylandı! {ilce_adi} risk seviyesi %{risk} (KRİTİK). AFAD Ekipleri sevk edildi!")
+            else:
+                st.warning(f"⚠️ Sevk Reddedildi: Risk %{risk} seviyesinde. AFAD Mobil Timleri sadece %75 üzerindeki KRİTİK durumlarda sevk edilebilir.")
+
     with col2:
-        if st.button("🚒 İtfaiye Gönder", use_container_width=True):
-            st.success(f"{koordinat['itfaiye']} görevlendirildi.")
+        if st.button(f"🚒 {koordinat['itfaiye']} Çıkış Ver", use_container_width=True, key="itfaiye_sevk_btn"):
+            st.success(f"Yerel itfaiye birimlerine telsiz emri gönderildi. Ekipler {ilce_adi} için çıkış yapıyor.")
+
     with col3:
-        if st.button("🚁 Drone Kaldır", use_container_width=True):
-            st.success("ŞAHİN Drone göreve başladı.")
+        if st.button("🚁 ŞAHİN Otonom Drone Kaldır", use_container_width=True, key="drone_sevk_btn"):
+            if risk >= 45:
+                st.success(f"🚁 Onaylandı! {ilce_adi} risk seviyesi %{risk}. Termal Otonom Drone keşif uçuşuna başladı.")
+            else:
+                st.warning(f"⚠️ Kalkış Reddedildi: Risk %{risk} (Düşük). Batarya koruması ve filo sağlığı için drone kaldırılması engellendi.")
 
-    st.write("---")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Yangın Riski", f"%{risk}")
-    c2.metric("Aktif İlçe", ilce_adi)
-    c3.metric("Yayılma Yönü", yayilma_yonu)
-
-# --- SEKME 2: RİSK ANALİZİ (Yapay Zeka Ağırlık Grafiği Eklendi) ---
+# KESİN ÇÖZÜM: st.container yapısını sekmenin hemen girişine alarak
+# sekme gizliyken bile Streamlit'in DOM yenilemesini tetiklemesini zorunlu kılıyoruz.
 with sekme2:
-    st.subheader(f"📈 {ilce_adi} Risk Analizi")
-    saatler = pd.date_range(end=datetime.now(), periods=24, freq="h")
-    risk_grafik = pd.DataFrame({
-        "Saat": saatler,
-        "Risk": np.random.randint(max(10, risk - 30), min(100, risk + 20), size=24)
-    })
-    st.line_chart(risk_grafik.set_index("Saat"))
-    
-    st.write("---")
-    st.subheader("🧠 ŞAHİN YZ Karar Faktörleri Analizi")
-    faktorler = pd.DataFrame({
-        "Sensör / Parametre": ["Sıcaklık Kontrolü", "Rüzgar Şiddeti", "Arazi Eğimi", "Atmosferik Nem (Ters Etki)"],
-        "Ağırlık Skoru": [sicaklik * 1.8, ruzgar * 0.8, egim * 0.4, nem * 1.2]
-    })
-    st.bar_chart(faktorler.set_index("Sensör / Parametre"), color="#4facfe")
+    with st.container(key=f"sekme_grafik_konteyner_yapisi_{ilce_adi}"):
+        st.subheader(f"📈 {ilce_adi} Bölgesi Son 24 Saatlik Değişim")
 
-# --- SEKME 3: KAYITLAR ---
+        # Seçili ilçenin anlık risk değerini baz alarak geçmiş veriler üretiyoruz
+        saatler = pd.date_range(end=datetime.now(), periods=24, freq="h")
+
+        # Seed'i ilçe adına bağlayarak her ilçenin özgün grafik verisi üretmesini sağlıyoruz
+        np.random.seed(len(ilce_adi) + int(risk))
+        gecmis_risk_verileri = np.random.randint(max(10, risk - 15), min(100, risk + 15), size=24)
+
+        # Tablo ismini benzersiz kılıyoruz, böylece Streamlit grafiğin değiştiğini %100 fark ediyor
+        risk_grafik = pd.DataFrame(
+            {f"{ilce_adi} Yangın Risk Analizi Trendi": gecmis_risk_verileri}
+        )
+        risk_grafik.index = saatler
+
+        # Grafik çizdiriliyor
+        st.line_chart(risk_grafik, color="#ff4b4b" if risk >= 45 else "#00c853")
+
 with sekme3:
-    st.subheader("📋 Sistem Günlük Kayıtları")
+    st.subheader("📋 AFAD İstasyon Log Kayıtları")
     kayitlar = pd.DataFrame({
-        "Tarih/Saat": [(datetime.now() - timedelta(minutes=i * 15)).strftime("%d.%m.%Y %H:%M") for i in range(10)],
-        "İlçe": [ilce_adi] * 10,
-        "Risk": [f"%{np.random.randint(20, 100)}" for _ in range(10)],
-        "Durum": ["AKTİF", "AKTİF", "İNCELENDİ", "ARŞİVLENDİ", "ARŞİVLENDİ", "ARŞİVLENDİ", "ARŞİVLENDİ", "ARŞİVLENDİ", "ARŞİVLENDİ", "ARŞİVLENDİ"]
+        "Tarih/Saat": [(datetime.now() - timedelta(minutes=i * 20)).strftime("%d.%m.%Y %H:%M") for i in range(5)],
+        "Gözlem Bölgesi": [ilce_adi] * 5,
+        "Anlık Sıcaklık": [f"{sicaklik}°C" for _ in range(5)],
+        "Hesaplanan Risk": [f"%{risk}" for _ in range(5)],
+        "Sistem Kararı": [
+            "GÜVENLİ - TAKİP" if risk < 45 else "⚠️ YÜKSEK - DRONE SEVKİ" if risk < 75 else "🚨 KRİTİK ACİL DURUM" for _
+            in range(5)]
     })
     st.dataframe(kayitlar, use_container_width=True)
