@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import folium
 import warnings
+import base64  # Ses dosyasını HTML içine gömmek için
+from gtts import gTTS  # ŞAHİN'in ses motoru
 from streamlit_autorefresh import st_autorefresh
 from streamlit_folium import st_folium
 from datetime import datetime, timedelta
@@ -20,6 +22,34 @@ st.set_page_config(
 
 # Haritayı her 15 saniyede bir otomatik yenilemek için
 st_autorefresh(interval=15000, key="canli_veri_akis_dongusu")
+
+
+# ==============================================================================
+# ŞAHİN SES MOTORU FONKSİYONU
+# ==============================================================================
+def sahin_seslendir(metin):
+    """ŞAHİN'in ürettiği yapay zeka özetini sese dönüştürür ve otomatik oynatır."""
+    try:
+        # Metni temizle ve ses dosyasına dönüştür
+        tts = gTTS(text=metin, lang='tr', slow=False)
+        audio_file = "sahin_ses.mp3"
+        tts.save(audio_file)
+
+        # Ses dosyasını oku ve base64 formatına çevir (Streamlit içinde oto-oynatma için en kararlı yol)
+        with open(audio_file, "rb") as f:
+            audio_bytes = f.read()
+        audio_base64 = base64.b64encode(audio_bytes).decode()
+
+        # HTML5 Audio tag'i ile otomatik oynatılmasını sağla (autoplay)
+        audio_html = f"""
+            <audio autoplay style="display:none;">
+                <source src="data:audio/mp3;base64,{audio_base64}" type="audio/mp3">
+            </audio>
+        """
+        st.markdown(audio_html, unsafe_allow_html=True)
+    except Exception as e:
+        pass  # Ses motorunda oluşabilecek anlık kesintileri sisteme yansıtma
+
 
 # ==============================================================================
 # MODERN CSS TASARIMLARI
@@ -103,22 +133,37 @@ st.markdown("""
 # ŞANLIURFA İLÇE METEOROLOJİ VERİTABANI
 # ==============================================================================
 ILCELER = {
-    "Haliliye": {"lat": 37.1650, "lon": 38.8300, "itfaiye": "Haliliye Acil Müdahale İstasyonu", "taban_sicaklik": 33.0, "taban_nem": 18.0, "taban_ruzgar": 9.8, "yon": "➡️ Doğu", "senaryo": "safe"},
-    "Karaköprü": {"lat": 37.1950, "lon": 38.8150, "itfaiye": "Karaköprü Merkez İtfaiye Amirliği", "taban_sicaklik": 32.5, "taban_nem": 19.0, "taban_ruzgar": 10.2, "yon": "↗️ Kuzeydoğu", "senaryo": "safe"},
-    "Eyyübiye": {"lat": 37.1400, "lon": 38.8000, "itfaiye": "Eyyübiye Sanayi Bölgesi İtfaiyesi", "taban_sicaklik": 36.2, "taban_nem": 15.0, "taban_ruzgar": 16.0, "yon": "➡️ Doğu", "senaryo": "warning"},
-    "Akçakale": {"lat": 36.7111, "lon": 38.9469, "itfaiye": "Akçakale Sınır İtfaiye Amirliği", "taban_sicaklik": 42.2, "taban_nem": 8.0, "taban_ruzgar": 24.5, "yon": "↗️ Kuzeydoğu", "senaryo": "critical"},
-    "Harran": {"lat": 36.8617, "lon": 39.0306, "itfaiye": "Harran İtfaiyesi", "taban_sicaklik": 35.0, "taban_nem": 15.0, "taban_ruzgar": 13.0, "yon": "➡️ Doğu", "senaryo": "safe"},
-    "Birecik": {"lat": 37.0315, "lon": 37.9782, "itfaiye": "Birecik Sahil İtfaiye Grubu", "taban_sicaklik": 34.1, "taban_nem": 16.0, "taban_ruzgar": 8.5, "yon": "↘️ Güneydoğu", "senaryo": "safe"},
-    "Bozova": {"lat": 37.3622, "lon": 38.4839, "itfaiye": "Bozova Merkez Müdahale Ekibi", "taban_sicaklik": 32.8, "taban_nem": 20.0, "taban_ruzgar": 12.0, "yon": "↖️ Kuzeybatı", "senaryo": "safe"},
-    "Ceylanpınar": {"lat": 36.8411, "lon": 40.0428, "itfaiye": "Ceylanpınar TİGEM İtfaiye Merkezi", "taban_sicaklik": 43.0, "taban_nem": 7.0, "taban_ruzgar": 28.0, "yon": "➡️ Doğu", "senaryo": "critical"},
-    "Halfeti": {"lat": 37.2475, "lon": 37.8697, "itfaiye": "Halfeti İtfaiye Müfrezesi", "taban_sicaklik": 32.2, "taban_nem": 21.0, "taban_ruzgar": 7.8, "yon": "⬇️ Güney", "senaryo": "safe"},
-    "Hilvan": {"lat": 37.5856, "lon": 38.9592, "itfaiye": "Hilvan Müdahale İstasyonu", "taban_sicaklik": 31.8, "taban_nem": 22.0, "taban_ruzgar": 11.5, "yon": "↖️ Kuzeybatı", "senaryo": "safe"},
-    "Siverek": {"lat": 37.7500, "lon": 39.3167, "itfaiye": "Siverek Bölge İtfaiye Amirliği", "taban_sicaklik": 31.0, "taban_nem": 24.0, "taban_ruzgar": 13.0, "yon": "⬆️ Kuzey", "senaryo": "safe"},
-    "Suruç": {"lat": 36.9764, "lon": 38.4244, "itfaiye": "Suruç İtfaiye Grubu", "taban_sicaklik": 34.5, "taban_nem": 16.0, "taban_ruzgar": 10.0, "yon": "➡️ Doğu", "senaryo": "safe"},
-    "Viranşehir": {"lat": 37.2353, "lon": 39.7619, "itfaiye": "Viranşehir Organize Sanayi İtfaiyesi", "taban_sicaklik": 35.5, "taban_nem": 13.0, "taban_ruzgar": 12.5, "yon": "↗️ Kuzeydoğu", "senaryo": "safe"}
+    "Haliliye": {"lat": 37.1650, "lon": 38.8300, "itfaiye": "Haliliye Acil Müdahale İstasyonu", "taban_sicaklik": 33.0,
+                 "taban_nem": 18.0, "taban_ruzgar": 9.8, "yon": "➡️ Doğu", "senaryo": "safe"},
+    "Karaköprü": {"lat": 37.1950, "lon": 38.8150, "itfaiye": "Karaköprü Merkez İtfaiye Amirliği",
+                  "taban_sicaklik": 32.5, "taban_nem": 19.0, "taban_ruzgar": 10.2, "yon": "↗️ Kuzeydoğu",
+                  "senaryo": "safe"},
+    "Eyyübiye": {"lat": 37.1400, "lon": 38.8000, "itfaiye": "Eyyübiye Sanayi Bölgesi İtfaiyesi", "taban_sicaklik": 36.2,
+                 "taban_nem": 15.0, "taban_ruzgar": 16.0, "yon": "➡️ Doğu", "senaryo": "warning"},
+    "Akçakale": {"lat": 36.7111, "lon": 38.9469, "itfaiye": "Akçakale Sınır İtfaiye Amirliği", "taban_sicaklik": 42.2,
+                 "taban_nem": 8.0, "taban_ruzgar": 24.5, "yon": "↗️ Kuzeydoğu", "senaryo": "critical"},
+    "Harran": {"lat": 36.8617, "lon": 39.0306, "itfaiye": "Harran İtfaiyesi", "taban_sicaklik": 35.0, "taban_nem": 15.0,
+               "taban_ruzgar": 13.0, "yon": "➡️ Doğu", "senaryo": "safe"},
+    "Birecik": {"lat": 37.0315, "lon": 37.9782, "itfaiye": "Birecik Sahil İtfaiye Grubu", "taban_sicaklik": 34.1,
+                "taban_nem": 16.0, "taban_ruzgar": 8.5, "yon": "↘️ Güneydoğu", "senaryo": "safe"},
+    "Bozova": {"lat": 37.3622, "lon": 38.4839, "itfaiye": "Bozova Merkez Müdahale Ekibi", "taban_sicaklik": 32.8,
+               "taban_nem": 20.0, "taban_ruzgar": 12.0, "yon": "↖️ Kuzeybatı", "senaryo": "safe"},
+    "Ceylanpınar": {"lat": 36.8411, "lon": 40.0428, "itfaiye": "Ceylanpınar TİGEM İtfaiye Merkezi",
+                    "taban_sicaklik": 43.0, "taban_nem": 7.0, "taban_ruzgar": 28.0, "yon": "➡️ Doğu",
+                    "senaryo": "critical"},
+    "Halfeti": {"lat": 37.2475, "lon": 37.8697, "itfaiye": "Halfeti İtfaiye Müfrezesi", "taban_sicaklik": 32.2,
+                "taban_nem": 21.0, "taban_ruzgar": 7.8, "yon": "⬇️ Güney", "senaryo": "safe"},
+    "Hilvan": {"lat": 37.5856, "lon": 38.9592, "itfaiye": "Hilvan Müdahale İstasyonu", "taban_sicaklik": 31.8,
+               "taban_nem": 22.0, "taban_ruzgar": 11.5, "yon": "↖️ Kuzeybatı", "senaryo": "safe"},
+    "Siverek": {"lat": 37.7500, "lon": 39.3167, "itfaiye": "Siverek Bölge İtfaiye Amirliği", "taban_sicaklik": 31.0,
+                "taban_nem": 24.0, "taban_ruzgar": 13.0, "yon": "⬆️ Kuzey", "senaryo": "safe"},
+    "Suruç": {"lat": 36.9764, "lon": 38.4244, "itfaiye": "Suruç İtfaiye Grubu", "taban_sicaklik": 34.5,
+              "taban_nem": 16.0, "taban_ruzgar": 10.0, "yon": "➡️ Doğu", "senaryo": "safe"},
+    "Viranşehir": {"lat": 37.2353, "lon": 39.7619, "itfaiye": "Viranşehir Organize Sanayi İtfaiyesi",
+                   "taban_sicaklik": 35.5, "taban_nem": 13.0, "taban_ruzgar": 12.5, "yon": "↗️ Kuzeydoğu",
+                   "senaryo": "safe"}
 }
 
-# Session state ilk kurulumu
 if "manuel_ilce" not in st.session_state:
     st.session_state.manuel_ilce = "Haliliye"
 
@@ -201,7 +246,7 @@ with col_left:
         <div class="sahin-core">🦅</div>
         <div style="color: white; font-weight: bold; font-size: 24px;">ŞAHİN v2.5 AI CORE</div>
         <div style="color: #94a3b8; font-size: 14px; margin-top: 5px;">Otonom Risk Değerlendirme Algoritması</div>
-        <div class="sahin-status">● CANLI METEOROLOJİ İSTASYON VERİLERİ AKTİF</div>
+        <div class="sahin-status">● CANLI SESLİ ANALİZ VE ASİSTAN MOTORU AKTİF</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -228,35 +273,57 @@ with col_right:
     st_folium(m, height=480, width=None, key=f"harita_istasyonu_{ilce_adi}", returned_objects=[])
 
 # ==============================================================================
-# ALT TELEMETRİ KUTULARI
+# ALT TELEMETRİ KUTULARI VE ŞAHİN SES ENTEGRASYONU
 # ==============================================================================
 st.write("---")
 st.markdown("### 📊 Real-Time Bölgesel Telemetri ve Analiz Verileri")
 
+# ŞAHİN'in seslendireceği dinamik metin senaryolarını kurguluyoruz
 if risk >= 75:
-    st.error(f"🤖 **ŞAHİN Yapay Zeka Özeti:** 🚨 **DİKKAT:** {ilce_adi} bölgesinde yoğun duman anomalisi ({duman} PPM) saptandı! Yangın riski %{risk}! Acil müdahale protokolü aktif.")
+    sahin_metni = f"Dikkat! Şahin yapay zekâ çekirdeği bildiriyor. {ilce_adi} bölgesinde yoğun duman anomalisi saptandı. Yangın riski yüzde {risk} ile kritik seviyededir. Acil müdahale protokolü aktif edildi."
+    st.error(
+        f"🤖 **ŞAHİN Yapay Zeka Özeti:** 🚨 **DİKKAT:** {ilce_adi} bölgesinde yoğun duman anomalisi ({duman} PPM) saptandı! Yangın riski %{risk}! Acil müdahale protokolü aktif.")
 elif risk >= 45:
-    st.warning(f"🤖 **ŞAHİN Yapay Zeka Özeti:** ⚠️ **UYARI:** {ilce_adi} bölgesinde meteorolojik şartlar risk sınırında. Hava kalitesi indeksi: HKE {hke}. Drone takibi önerilir.")
+    sahin_metni = f"Şahin uyarısı. {ilce_adi} bölgesinde meteorolojik şartlar risk sınırında seyrediyor. Hava kalitesi indeksi tehlike arz edebilir. Drone takibi önerilir."
+    st.warning(
+        f"🤖 **ŞAHİN Yapay Zeka Özeti:** ⚠️ **UYARI:** {ilce_adi} bölgesinde meteorolojik şartlar risk sınırında. Hava kalitesi indeksi: HKE {hke}. Drone takibi önerilir.")
 else:
-    st.info(f"🤖 **ŞAHİN Yapay Zeka Özeti:** **{ilce_adi}** istasyon verileri stabil. Yangın riski %{risk} ile tamamen güvenli sınırlar içerisindedir.")
+    sahin_metni = f"Şahin sistem raporu. {ilce_adi} istasyon verileri stabil. Yangın riski yüzde {risk} ile tamamen güvenli sınırlar içerisindedir."
+    st.info(
+        f"🤖 **ŞAHİN Yapay Zeka Özeti:** **{ilce_adi}** istasyon verileri stabil. Yangın riski %{risk} ile tamamen güvenli sınırlar içerisindedir.")
+
+# ŞAHİN SES MOTORUNU ÇAĞIRMA (Sayfa her yüklendiğinde ya da ilçe değiştiğinde konuşur)
+sahin_seslendir(sahin_metni)
 
 row_col1, row_col2, row_col3, row_col4, row_col5, row_col6 = st.columns(6)
 
 with row_col1:
-    st.markdown(f'<div class="weather-card-wide"><div class="card-title-wide">🌡️ Sıcaklık</div><div class="card-value-wide">{sicaklik}°C</div><div class="card-sub-wide">Hissedilen: {sicaklik}°C</div></div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="weather-card-wide"><div class="card-title-wide">🌡️ Sıcaklık</div><div class="card-value-wide">{sicaklik}°C</div><div class="card-sub-wide">Hissedilen: {sicaklik}°C</div></div>',
+        unsafe_allow_html=True)
 with row_col2:
-    st.markdown(f'<div class="weather-card-wide"><div class="card-title-wide">💧 Bağıl Nem</div><div class="card-value-wide">%{nem}</div><div class="card-sub-wide">Kuruluk: Kararlı</div></div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="weather-card-wide"><div class="card-title-wide">💧 Bağıl Nem</div><div class="card-value-wide">%{nem}</div><div class="card-sub-wide">Kuruluk: Kararlı</div></div>',
+        unsafe_allow_html=True)
 with row_col3:
-    st.markdown(f'<div class="weather-card-wide"><div class="card-title-wide">💨 Rüzgar</div><div class="card-value-wide">{ruzgar} <span style="font-size:14px;">km/s</span></div><div class="card-sub-wide">Yön: {yayilma_yonu}</div></div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="weather-card-wide"><div class="card-title-wide">💨 Rüzgar</div><div class="card-value-wide">{ruzgar} <span style="font-size:14px;">km/s</span></div><div class="card-sub-wide">Yön: {yayilma_yonu}</div></div>',
+        unsafe_allow_html=True)
 with row_col4:
-    st.markdown(f'<div class="weather-card-wide"><div class="card-title-wide">🌫️ Duman Yoğunluğu</div><div class="card-value-wide">{duman} <span style="font-size:14px;">PPM</span></div><div class="card-sub-wide">Durum: Aktif</div></div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="weather-card-wide"><div class="card-title-wide">🌫️ Duman Yoğunluğu</div><div class="card-value-wide">{duman} <span style="font-size:14px;">PPM</span></div><div class="card-sub-wide">Durum: Aktif</div></div>',
+        unsafe_allow_html=True)
 with row_col5:
-    st.markdown(f'<div class="weather-card-wide"><div class="card-title-wide">🍃 Hava Kalitesi</div><div class="card-value-wide">HKE {hke}</div><div class="card-sub-wide">Atmosfer İndeksi</div></div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="weather-card-wide"><div class="card-title-wide">🍃 Hava Kalitesi</div><div class="card-value-wide">HKE {hke}</div><div class="card-sub-wide">Atmosfer İndeksi</div></div>',
+        unsafe_allow_html=True)
 with row_col6:
-    st.markdown(f'<div class="weather-card-wide"><div class="card-title-wide">⛰️ Arazi Eğimi</div><div class="card-value-wide">{egim}°</div><div class="card-sub-wide">Topografya: Sabit</div></div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="weather-card-wide"><div class="card-title-wide">⛰️ Arazi Eğimi</div><div class="card-value-wide">{egim}°</div><div class="card-sub-wide">Topografya: Sabit</div></div>',
+        unsafe_allow_html=True)
 
 # ==============================================================================
-# SEKMELER VE MÜDAHALE BUTONLARI (DİNAMİK RESET MİZANPAJI)
+# SEKMELER VE MÜDAHALE BUTONLARI
 # ==============================================================================
 st.write("---")
 sekme1, sekme2, sekme3 = st.tabs(["🚒 Operasyon Komutları", "📈 İstatistiksel Risk Analizi", "📋 Sistem Günlükleri"])
@@ -270,7 +337,8 @@ with sekme1:
             if risk >= 75:
                 st.success(f"🚨 Onaylandı! {ilce_adi} risk seviyesi %{risk} (KRİTİK). AFAD Ekipleri sevk edildi!")
             else:
-                st.warning(f"⚠️ Sevk Reddedildi: Risk %{risk} seviyesinde. AFAD Mobil Timleri sadece %75 üzerindeki KRİTİK durumlarda sevk edilebilir.")
+                st.warning(
+                    f"⚠️ Sevk Reddedildi: Risk %{risk} seviyesinde. AFAD Mobil Timleri sadece %75 üzerindeki KRİTİK durumlarda sevk edilebilir.")
 
     with col2:
         if st.button(f"🚒 {koordinat['itfaiye']} Çıkış Ver", use_container_width=True, key="itfaiye_sevk_btn"):
@@ -281,28 +349,21 @@ with sekme1:
             if risk >= 45:
                 st.success(f"🚁 Onaylandı! {ilce_adi} risk seviyesi %{risk}. Termal Otonom Drone keşif uçuşuna başladı.")
             else:
-                st.warning(f"⚠️ Kalkış Reddedildi: Risk %{risk} (Düşük). Batarya koruması ve filo sağlığı için drone kaldırılması engellendi.")
+                st.warning(
+                    f"⚠️ Kalkış Reddedildi: Risk %{risk} (Düşük). Batarya koruması ve filo sağlığı için drone kaldırılması engellendi.")
 
-# KESİN ÇÖZÜM: st.container yapısını sekmenin hemen girişine alarak
-# sekme gizliyken bile Streamlit'in DOM yenilemesini tetiklemesini zorunlu kılıyoruz.
 with sekme2:
     with st.container(key=f"sekme_grafik_konteyner_yapisi_{ilce_adi}"):
         st.subheader(f"📈 {ilce_adi} Bölgesi Son 24 Saatlik Değişim")
 
-        # Seçili ilçenin anlık risk değerini baz alarak geçmiş veriler üretiyoruz
         saatler = pd.date_range(end=datetime.now(), periods=24, freq="h")
-
-        # Seed'i ilçe adına bağlayarak her ilçenin özgün grafik verisi üretmesini sağlıyoruz
         np.random.seed(len(ilce_adi) + int(risk))
         gecmis_risk_verileri = np.random.randint(max(10, risk - 15), min(100, risk + 15), size=24)
 
-        # Tablo ismini benzersiz kılıyoruz, böylece Streamlit grafiğin değiştiğini %100 fark ediyor
         risk_grafik = pd.DataFrame(
             {f"{ilce_adi} Yangın Risk Analizi Trendi": gecmis_risk_verileri}
         )
         risk_grafik.index = saatler
-
-        # Grafik çizdiriliyor
         st.line_chart(risk_grafik, color="#ff4b4b" if risk >= 45 else "#00c853")
 
 with sekme3:
