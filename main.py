@@ -1,26 +1,26 @@
 # ==================== IMPORTLAR ====================
-import os  
-import json  
+import requests
+import pandas as pd
 import streamlit as st
+import os
+import json
+import asyncio
 import pandas as pd
 import numpy as np
-import folium
-import warnings
-import asyncio
-import base64
-import edge_tts  # Profesyonel Türkçe erkek sesi
-import speech_recognition as sr  # Ses tanıma motoru
-import requests  # İnternet kontrolü için
-from streamlit_autorefresh import st_autorefresh
-from streamlit_folium import st_folium
-from datetime import datetime, timedelta
 import streamlit as st
-import pandas as pd
-from datetime import datetime
-from streamlit_folium import st_folium # Harita için
+import folium
+import warnings  # <--- İşte bu satır eksikti!
+from datetime import datetime, timedelta
+from streamlit_folium import st_folium
+from streamlit_autorefresh import st_autorefresh
+import speech_recognition as sr
+import pyttsx3 
+import edge_tts
+import base64
 
-# Sayfa ayarları (en üstte olmalı)
-st.set_page_config(layout="wide")
+if 'sahin_konustu_mu' not in st.session_state:
+    st.session_state.sahin_konustu_mu = False
+
 
 # Session State tanımlamaları (Hataları önlemek için)
 if "gecmis_risk" not in st.session_state:
@@ -98,6 +98,8 @@ if "lora_gecmisi" not in st.session_state:
                 f.write("LORA_DUMMY_WEIGHTS")
         with open(log_dosyasi, "w") as f:
             json.dump(st.session_state.lora_gecmisi, f, indent=4)
+            
+            
 
 # ==============================================================================
 # SAYFA AYARLARI
@@ -109,8 +111,19 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# ŞAHİN ASYNC ERKEK SES MOTORU (EDGE-TTS)
+# ŞAHİN ASYNC SES MOTORU (EDGE-TTS)
 # ==============================================================================
+# ŞAHİN'e anlık risk değerini fonksiyona gönderirken parametre olarak veriyoruz
+def sahin_analiz_et(soru, sicaklik, risk, ilce):
+    # Sabit "yüksek risk" uyarısı yerine, gelen 'risk' değerini kullan
+    if risk >= 75:
+        durum = "KRİTİK"
+    elif risk >= 50:
+        durum = "ORTA"
+    else:
+        durum = "DÜŞÜK"
+        
+    return f"{ilce} bölgesinde risk seviyesi: %{risk}. Durum: {durum}."
 async def amain(metin) -> bytes:
     communicate = edge_tts.Communicate(metin, "tr-TR-AhmetNeural", rate="+0%")
     audio_bytes = b""
@@ -118,8 +131,13 @@ async def amain(metin) -> bytes:
         if chunk["type"] == "audio":
             audio_bytes += chunk["data"]
     return audio_bytes
-
+    
+def sahin_uyar():
+    # Kritik bir durumda tetiklenecek alarm sesi
+    if os.path.exists("alarm.mp3"):
+        st.audio("alarm.mp3", format='audio/mp3', autoplay=True)
 def sahin_seslendir(cevap_metni):
+    
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -133,6 +151,7 @@ def sahin_seslendir(cevap_metni):
             </audio>
         """
         st.markdown(ses_html, unsafe_allow_html=True)
+
     except Exception as e:
         st.error(f"⚠️ Seslendirme motoru hatası: {e}")
 
@@ -149,14 +168,13 @@ def internet_var_mi():
 # ==============================================================================
 # VERİ LOG FONKSİYONU
 # ==============================================================================
-def log_kaydet(ilce, risk_val, seviye_str):
-    # Tablo yapısıyla tam uyumlu olması için yeni log girdisi ekliyoruz
+def log_kaydet(ilce, risk_val, seviye_str, aksiyon): 
     yeni_log = {
         "Zaman": datetime.now().strftime("%H:%M:%S"),
         "İlçe": ilce,
         "Risk": f"%{risk_val}",
-        "Aksiyon": "Sistem Taraması Aktif",
-        "Durum": "🚨 KRİTİK" if risk_val >= 75 else "⚠️ UYARI" if risk_val >= 45 else "🟢 STABİL"
+        "Aksiyon": aksiyon,
+        "Durum": seviye_str  # 'durum_str' yerine 'seviye_str' kullanmalısın
     }
     st.session_state.veri_log.append(yeni_log)
     if len(st.session_state.veri_log) > 50:
@@ -165,72 +183,46 @@ def log_kaydet(ilce, risk_val, seviye_str):
 # ==============================================================================
 # GÜVENLİ VE OTOMATİK FREKANS TARAMALI DİNLEME MOTORU
 # ==============================================================================
-def sahin_dinle():
-    import sounddevice as sd
-    import wave
-    import io
+# ==============================================================================
+# ŞAHİN RAPORLAMA FONKSİYONU (Bunu kodunun en üstündeki fonksiyonların arasına ekle)
+# ==============================================================================
+def sahin_raporla(ilce_adi, risk, sicaklik, seviye):
+    rapor_metni = (
+        f"Şahin durum raporu. {ilce_adi} bölgesinde anlık sensör verileri; "
+        f"sıcaklık {sicaklik} derece, risk seviyesi yüzde {risk}. "
+        f"Saha durumu şu an {seviye} olarak değerlendirilmiştir."
+    )
+    st.success(f"🤖 {rapor_metni}")
+    sahin_seslendir(rapor_metni)
 
-    duration = 5
-    aktif_cihaz_id = 9
-    denenecek_frekanslar = [44100, 48000, 16000, 32000]
+# ==============================================================================
+# POPOVER KISMI (Kodundaki eski popover bloğunu bununla değiştir)
+# ==============================================================================
+# 1. HATA VEREN 416. SATIRDAKİ 'sahin_dinle' SATIRINI BUL VE SİL!
+# 2. POP-OVER BLOĞUNU ŞU ŞEKİLDE GÜNCELLE:
 
-    audio_raw = None
-    fs = None
+if "risk" not in st.session_state:
+    st.session_state.risk = 0
+    st.session_state.sicaklik = 0
+    st.session_state.seviye = "Bilinmiyor"
+    st.session_state.ilce_adi = "Belirsiz"
 
-    for hizi_dene in denenecek_frekanslar:
-        try:
-            audio_raw = sd.rec(
-                int(duration * hizi_dene),
-                samplerate=hizi_dene,
-                channels=1,
-                dtype='float32',
-                device=aktif_cihaz_id
-            )
-            fs = hizi_dene
-            break
-        except Exception:
-            continue
-
-    if audio_raw is None or fs is None:
-        st.error("❌ Giriş kanalı kilitli.")
-        return None
-
-    st.info(f"🎧 ŞAHİN Dinliyor... [{fs} Hz]")
-
-    try:
-        sd.wait()
+with st.popover(" "):
+    st.subheader("📡 ŞAHİN Kontrol Merkezi")
+    
+    if st.button("📢 Güncel Durumu Seslendir"):
+        # Hata almamak için session_state'den çekiyoruz
+        metin = (f"Şahin durum raporu. {st.session_state.ilce_adi} bölgesinde anlık veriler; "
+                 f"sıcaklık {st.session_state.sicaklik} derece, risk seviyesi yüzde {st.session_state.risk}. "
+                 f"Durum: {st.session_state.seviye}.")
         
-        max_val = np.max(np.abs(audio_raw))
-        if max_val > 0:
-            audio_normal = (audio_raw / max_val) * 32767.0
-        else:
-            audio_normal = audio_raw * 32767.0
-
-        audio_data = audio_normal.astype(np.int16)
-
-        wav_buf = io.BytesIO()
-        with wave.open(wav_buf, 'wb') as wf:
-            wf.setnchannels(1)
-            wf.setsampwidth(2)
-            wf.setframerate(fs)
-            wf.writeframes(audio_data.tobytes())
-
-        wav_buf.seek(0)
-
-        r = sr.Recognizer()
-        with sr.AudioFile(wav_buf) as source:
-            audio = r.record(source)
-
-        metin = r.recognize_google(audio, language="tr-TR")
-        return metin.lower()
-
-    except sr.UnknownValueError:
-        st.error("❌ Anlayamadı.")
-        return None
-    except Exception as e:
-        st.error(f"⚠️ Hata: {e}")
-        return None
-
+        st.success(f"🤖 {metin}")
+        sahin_seslendir(metin)
+        
+    if st.button("📄 Detaylı Rapor"):
+        rapor = f"--- ŞAHİN RAPORU ---\nBölge: {st.session_state.ilce_adi}\nRisk: %{st.session_state.risk}\nSıcaklık: {st.session_state.sicaklik}C\nDurum: {st.session_state.seviye}"
+        st.text_area("Rapor:", value=rapor, height=150)
+        st.download_button("💾 İndir", rapor, "rapor.txt")
 # ==============================================================================
 # MODERN CSS
 # ==============================================================================
@@ -273,48 +265,75 @@ ILCELER = {
     "Viranşehir": {"lat": 37.2353, "lon": 39.7619, "itfaiye": "Viranşehir", "taban_sicaklik": 35.5, "taban_nem": 13.0, "taban_ruzgar": 12.5, "yon": "↗️", "senaryo": "safe"}
 }
 
-# GÖRÜNTÜLEME MODU
+
+if 'ilce_adi' not in st.session_state:
+    st.session_state.ilce_adi = "Haliliye"
+if 'gecmis_risk' not in st.session_state:
+    st.session_state.gecmis_risk = []
+if 'veri_log' not in st.session_state:
+    st.session_state.veri_log = []
+
+# İlçe seçimini yap
 goruntuleme_modu = st.radio("📡", ["📍 Manuel", "🔄 Otomatik"], horizontal=True, key="mod")
-
 if goruntuleme_modu == "📍 Manuel":
-    st.session_state.ilce_adi = st.selectbox("📍", list(ILCELER.keys()), key="secim")
+    ilce_adi = st.selectbox("📍", list(ILCELER.keys()), key="secim")
 else:
-    st.session_state.ilce_adi = list(ILCELER.keys())[int(datetime.now().timestamp() / 15) % len(ILCELER)]
+    ilce_adi = list(ILCELER.keys())[int(datetime.now().timestamp() / 15) % len(ILCELER)]
+    st.info(f"🔄 Otomatik Takip Modu: {ilce_adi}")
 
-ilce_adi = st.session_state.ilce_adi
+# Değişkenleri global hale getir
+st.session_state.ilce_adi = ilce_adi
 koordinat = ILCELER[ilce_adi]
 
-
-# TELEMETRİ HESAPLAMALARI
+# ==============================================================================
+# 1. HESAPLAMA BLOĞU 
+# ==============================================================================
 np.random.seed(int(datetime.now().timestamp()) + len(ilce_adi))
+
 sicaklik = round(float(koordinat["taban_sicaklik"] + np.random.uniform(-0.3, 0.4)), 1)
 nem = round(float(koordinat["taban_nem"] + np.random.uniform(-1.0, 1.0)), 1)
 ruzgar = round(float(koordinat["taban_ruzgar"] + np.random.uniform(-0.5, 0.5)), 1)
-egim = round(float(np.random.uniform(8.0, 15.0)), 1)
 
-if koordinat["senaryo"] == "critical":
-    duman = int(np.random.randint(380, 520))
-    hke = int(np.random.randint(160, 240))
+if koordinat.get("senaryo") == "critical":
     risk = int(np.random.randint(82, 96))
-elif koordinat["senaryo"] == "warning":
-    duman = int(np.random.randint(90, 140))
-    hke = int(np.random.randint(65, 95))
+    seviye, ikon = "KRİTİK", "🚨"
+elif koordinat.get("senaryo") == "warning":
     risk = int(np.random.randint(52, 68))
+    seviye, ikon = "YÜKSEK", "⚠️"
 else:
-    duman = int(np.random.randint(12, 28))
-    hke = 45
-    base_risk = (sicaklik * 1.0) - (nem * 0.5) + (ruzgar * 0.3)
-    risk = int(max(10, min(base_risk, 44)))
+    risk = int(max(10, min((sicaklik * 1.0) - (nem * 0.5) + (ruzgar * 0.3), 44)))
+    seviye, ikon = "DÜŞÜK", "✅"
 
-if risk >= 75:
-    seviye, ikon, banner_renk = "KRİTİK", "🚨", "linear-gradient(135deg, #D50000, #FF6D00)"
-elif risk >= 45:
-    seviye, ikon, banner_renk = "YÜKSEK", "⚠️", "linear-gradient(135deg, #FFD600, #FF8F00)"
-else:
-    seviye, ikon, banner_renk = "DÜŞÜK", "✅", "linear-gradient(135deg, #00C853, #64DD17)"
+# --- OTOMATİK UYARI SADECE SEVİYEYE BAĞLI OLSUN ---
+if seviye == "KRİTİK" and not st.session_state.sahin_konustu_mu:
+    sahin_seslendir(f"Dikkat, {ilce_adi} bölgesinde kritik seviyede risk algılandı!")
+    st.session_state.sahin_konustu_mu = True
+elif seviye == "DÜŞÜK":
+    st.session_state.sahin_konustu_mu = False
+
+# 3. TEK BİR BANNER BLOĞU (En son, hesaplamalar bittikten sonra)
+st.markdown("""
+<style>
+.main-banner { background: #0f172a; padding: 20px; border-radius: 12px; display: flex; justify-content: space-between; margin-bottom: 20px; color: white; border: 1px solid #334155; }
+.data-box { display: flex; align-items: center; gap: 10px; }
+.value { font-weight: bold; font-size: 18px; color: #e2e8f0; }
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown(f"""
+<div class="main-banner">
+    <div class="data-box"><div>📍</div><div>Bölge<br><span class="value">{ilce_adi}</span></div></div>
+    <div class="data-box"><div>{ikon}</div><div>Risk<br><span class="value">%{risk}</span></div></div>
+    <div class="data-box"><div>⚙️</div><div>Durum<br><span class="value">{seviye}</span></div></div>
+    <div class="data-box"><div>🚒</div><div>Merkez<br><span class="value">{koordinat.get('merkez', 'BELİRSİZ')}</span></div></div>
+</div>
+""", unsafe_allow_html=True)
+
+
+
 
 # ==================== 🔥 SÖZLÜK UYUMLU DOĞRU AKTARIM ADIMI 🔥 ====================
-log_kaydet(ilce_adi, risk, seviye)
+log_kaydet(ilce_adi, risk, seviye, "Sistem Taraması")
 
 baska_bir_deger = 50
 yeni_veri = {
@@ -348,117 +367,83 @@ else:
 # 🚀 PROFEOSYONEL OGM KOMUTA BANNERI VE KONTROL PANELİ
 # ==============================================================================
 
-if risk >= 75:
-    neon_renk = "#ef4444"       # Kritik Kırmızı
-    border_glow = "0 0 15px rgba(239, 68, 68, 0.25)"
-    badge_bg = "rgba(239, 68, 68, 0.1)"
-elif risk >= 45:
-    neon_renk = "#f59e0b"       # Uyarı Turuncusu
-    border_glow = "0 0 15px rgba(245, 158, 11, 0.25)"
-    badge_bg = "rgba(245, 158, 11, 0.1)"
-else:
-    neon_renk = "#10b981"       # Stabil Yeşil
-    border_glow = "0 0 15px rgba(16, 185, 129, 0.25)"
-    badge_bg = "rgba(16, 185, 129, 0.1)"
+# İnternet kontrolünü zaten yapmıştık, sadece durumu belirleyelim
+kaynak = "📡 Canlı" if internet_var_mi() else "💾 Önbellek"
 
-st.markdown(f"""
+
+# Renk tanımları (Zaten Banner'da kullanıyoruz, burada sadece değişken olarak kalsın)
+if risk >= 75:
+    neon_renk = "#ef4444"
+elif risk >= 45:
+    neon_renk = "#f59e0b"
+else:
+    neon_renk = "#3b82f6"
+
+st.sidebar.success(f"Bağlantı: {kaynak}")
+
+
+# --- ŞAHİN İLETİŞİM MERKEZİ VE TÜM STİLLER ---
+
+
+st.markdown("""
 <style>
-/* Kurumsal Banner Alanı */
-.ogm-military-banner {{
-    background: linear-gradient(135deg, #0b0f19 0%, #111827 100%);
-    border-left: 5px solid {neon_renk};
-    border-top: 1px solid #1f2937;
-    border-right: 1px solid #1f2937;
-    border-bottom: 1px solid #1f2937;
-    box-shadow: {border_glow};
-    border-radius: 12px;
-    padding: 20px;
-    margin-bottom: 20px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}}
-.ogm-title-group h1 {{
-    font-family: 'Segoe UI', Roboto, sans-serif;
-    margin: 0;
-    font-size: 24px;
-    color: #f3f4f6;
-    font-weight: 700;
-    letter-spacing: 0.5px;
-}}
-.ogm-sub-badge {{
-    display: inline-block;
-    background: {badge_bg};
-    border: 1px solid {neon_renk}44;
-    color: {neon_renk};
-    padding: 3px 10px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 600;
-    margin-top: 6px;
-    letter-spacing: 0.5px;
-}}
-.ogm-risk-value {{
-    font-size: 38px;
-    font-weight: 800;
-    color: {neon_renk};
-    font-family: monospace;
-    line-height: 1;
-}}
-.ogm-status-text {{
-    font-size: 11px;
-    font-weight: 700;
-    color: #9ca3af;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    margin-top: 4px;
-}}
-/* Termal Kamera Panel Kutusu */
-.termal-container-box {{
-    background: #0b0f19;
-    border: 1px solid #1f2937;
-    border-radius: 10px;
-    padding: 18px;
-    margin-bottom: 20px;
-}}
-.termal-header {{
-    color: #ef4444;
-    font-size: 12px;
-    font-weight: bold;
-    letter-spacing: 1px;
-    margin-bottom: 15px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}}
-.termal-grid-layout {{
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 20px;
-}}
-.termal-stat-item {{
-    border-left: 2px solid #374151;
-    padding-left: 12px;
-}}
-.termal-stat-label {{
-    font-size: 11px;
-    color: #6b7280;
-    text-transform: uppercase;
-    font-weight: 600;
-}}
-.termal-stat-val {{
-    font-size: 22px;
-    font-weight: 700;
-    color: #e5e7eb;
-    margin-top: 2px;
-}}
+/* 1. Dönen Mavi Işıklı Logo (Görsel Katman) */
+@keyframes spin { 100% { transform: rotate(360deg); } }
+.sahin-gorsel {
+    position: fixed; bottom: 30px; right: 30px; z-index: 999;
+    width: 110px; height: 110px; border-radius: 50%;
+    background: #0f172a; border: 3px solid #3b82f6;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 30px; animation: spin 10s linear infinite;
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.6);
+}
+
+/* 2. Görünmez Buton (Üstüne Binen Katman) */
+.sahin-buton {
+    position: fixed; bottom: 30px; right: 30px; z-index: 1000;
+    width: 70px; height: 70px; opacity: 0; cursor: pointer;
+}
+</style>
+
+<div class="sahin-gorsel">🦅</div>
+""", unsafe_allow_html=True)
+
+# 1. HESAPLAMA BLOĞUNUN EN SONUNA EKLE (Değişkenler her an güncel olsun diye)
+st.session_state.ilce_adi = ilce_adi
+st.session_state.risk = risk
+st.session_state.sicaklik = sicaklik
+st.session_state.seviye = seviye
+
+# 2. ŞAHİN BUTON VE MENÜ BLOĞU (Bunu sayfanın herhangi bir yerine koy)
+st.markdown("""
+<style>
+/* 1. Kendi logon zaten dönüyor, biz popover'ı onun üzerine çiviliyoruz */
+[data-testid="stPopover"] {
+    position: fixed; bottom: 30px; right: 30px; 
+    z-index: 1002; width: 110px; height: 110px; opacity: 0;
+}
 </style>
 """, unsafe_allow_html=True)
 
+with st.popover(" "): 
+    st.subheader("📡 ŞAHİN Kontrol Merkezi")
+    
+    # 📢 Sesli Rapor
+    if st.button("📢 Güncel Durumu Seslendir", key="btn_sahin_ses"):
+        rapor = (f"Şahin durum raporu. {st.session_state.ilce_adi} bölgesinde anlık veriler; "
+                 f"sıcaklık {st.session_state.sicaklik} derece, risk seviyesi yüzde {st.session_state.risk}. "
+                 f"Durum: {st.session_state.seviye}.")
+        st.success(f"🤖 {rapor}")
+        sahin_seslendir(rapor)
 
+    st.write("---")
 
-
-# ==============================================================================
+    # 📄 Rapor İndirme
+    if st.button("📄 Detaylı Rapor", key="btn_sahin_rapor"):
+        rapor_txt = f"--- ŞAHİN RAPORU ---\nBölge: {st.session_state.ilce_adi}\nRisk: %{st.session_state.risk}\nSıcaklık: {st.session_state.sicaklik}C\nDurum: {st.session_state.seviye}"
+        st.text_area("Rapor:", value=rapor_txt, height=150)
+        st.download_button("💾 İndir", rapor_txt, "rapor.txt")
+#===============================
 # 3. CANLI AKSİYON VE TERMAL VERİ BESLEMESİ (Bozuk Kodlar Ayıklandı)
 # ==============================================================================
 st.markdown("### 🚨 Saha Koordinasyon Merkezi")
@@ -491,24 +476,68 @@ c1, c2 = st.columns([1, 1])
 ses = None 
 
 with c1:
-    st.markdown("""<div class="sahin-robot-container"><div class="sahin-core">🦅</div><div style="color:white;font-weight:bold;font-size:22px;">ŞAHİN v2.5</div><div class="sahin-status">● SESLİ İLETİŞİM AKTİF</div></div>""", unsafe_allow_html=True)
+    st.markdown("""
+<style>
+.sahin-assistant {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    width: 70px;
+    height: 70px;
+    background: linear-gradient(135deg, #1e293b, #0f172a);
+    border: 2px solid #3b82f6;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #3b82f6;
+    font-size: 28px;
+    box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
+    cursor: pointer;
+    z-index: 9999;
+    transition: transform 0.3s ease;
+}
+.sahin-assistant:hover {
+    transform: scale(1.1);
+}
+</style>
+""", unsafe_allow_html=True)
+st.markdown("""
+<style>
+.akis-paneli {
+    height: 440px;
+    background-color: #0c1220;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid #1e3a8a;
+    color: #e2e8f0;
+    font-family: 'Roboto Mono', monospace;
+    font-size: 15px; /* Yazıları biraz büyüttük */
+    overflow-y: auto;
+}
+.telsiz-mesaj {
+    text-align: left;
+    margin-bottom: 12px;
+    border-bottom: 1px solid #1e293b;
+    padding-bottom: 8px;
+    line-height: 1.4;
+}
+/* Renk Kodları */
+.merkez { color: #f59e0b; font-weight: bold; } /* Turuncu: Merkez */
+.sistem { color: #3b82f6; font-weight: bold; } /* Mavi: Sistem */
+.uyari { color: #ef4444; font-weight: bold; }  /* Kırmızı: Uyarı */
+.bilgi { color: #10b981; font-weight: bold; }  /* Yeşil: Bilgi */
+</style>
+""", unsafe_allow_html=True)
+
+# ==============================================================================
+# OPERASYON SEKME (Gövde)
+# ==============================================================================
+
     
-    if st.button("🎤 Sor", key="btn_sor"):
-        ses = sahin_dinle()
-        if ses: 
-            if any(k in ses for k in ["sıcaklık", "derece", "sıcak"]):
-                cevap = f"{ilce_adi} bölgesinde anlık sıcaklık {sicaklik} derece seyrinde."
-            elif any(k in ses for k in ["risk", "durum", "tehlike", "alarm"]):
-                cevap = f"{ilce_adi} için hesaplanan yangın riski yüzde {risk}. Şu an {seviye} seviyedeyiz."
-            elif any(k in ses for k in ["nem", "rutubet"]):
-                cevap = f"{ilce_adi} bölgesinde nem oranı yüzde {nem} olarak ölçüldü."
-            elif any(k in ses for k in ["rüzgar", "fırtına", "esinti"]):
-                cevap = f"Rüzgar hızı saatte {ruzgar} kilometre, yönü ise {koordinat['yon']}."
-            else:
-                cevap = f"{ilce_adi} bölgesi analiz edildi. Risk oranı yüzde {risk}."
-            
-            st.success(f"🤖 {cevap}")
-            sahin_seslendir(cevap)
+
+
+
 
 @st.cache_resource(show_spinner=False)
 def haritayi_olustur(enlem, boylam, risk_degeri, ilce_ismi, itfaiye_merkezi):
@@ -522,218 +551,152 @@ def haritayi_olustur(enlem, boylam, risk_degeri, ilce_ismi, itfaiye_merkezi):
     folium.Marker([enlem, boylam], icon=folium.Icon(color="blue", icon="info-sign")).add_to(m)
     return m
 
-with c2:
-    harita_objesi = haritayi_olustur(koordinat["lat"], koordinat["lon"], risk, ilce_adi, koordinat["itfaiye"])
-    st_folium(harita_objesi, height=380, key=f"harita_{ilce_adi}") 
+# ==============================================================================
+# 🚒 HARİTA VE TELSİZ KOMUTA PANELİ (Yan Yana)
+# ==============================================================================
 
-st.write("---")
+# Harita ve Telsiz için kolon yapısı (Harita 2 birim, Telsiz 1 birim yer kaplar)
+col_harita, col_telsiz = st.columns([2, 1])
+def haritayi_olustur_sanliurfa(ilceler_dict):
+    m = folium.Map(location=[37.1674, 38.7952], zoom_start=10)
+    for isim, veri in ilceler_dict.items():
+        renk = "red" if veri["senaryo"] == "critical" else "orange" if veri["senaryo"] == "warning" else "green"
+        folium.Marker(
+            [veri["lat"], veri["lon"]],
+            popup=f"<b>{isim}</b>",
+            icon=folium.Icon(color=renk, icon="info-sign")
+        ).add_to(m)
+    return m
 
-# 3. YENİ NESİL ÖZELLEŞTİRİLMİŞ TELEMETRİ GRID'İ
-st.markdown("### 📊 Anlık Sensör ve Telemetri Matrisi")
+# Hata almamak için her değişkeni önce başlatıyoruz
+sicaklik = locals().get('sicaklik', 0)
+nem = locals().get('nem', 0)
+duman = locals().get('duman', 0)
 
-# Delta durum renkleri ve mantığı
+# Şimdi artık hata vermeden çalışırlar:
 sicaklik_delta = f"<span style='color:#ef4444;'>🔥 KRİTİK</span>" if sicaklik > 38 else f"<span style='color:#64748b;'>NORMAL</span>"
 nem_delta = f"<span style='color:#ef4444;'>⚠️ DÜŞÜK</span>" if nem < 12 else f"<span style='color:#10b981;'>OPTIMAL</span>"
 duman_delta = f"<span style='color:#ef4444;'>🚨 ANOMALİ</span>" if duman > 200 else f"<span style='color:#10b981;'>TEMİZ</span>"
 
-# Streamlit'in iç div'lerini bypass eden ve yan yana dizilimi garanti eden esnek CSS
-st.markdown(f"""
-<style>
-.sahin-telemetri-flex-container {{
-    display: flex !important;
-    flex-direction: row !important;
-    flex-wrap: nowrap !important;
-    justify-content: space-between !important;
-    gap: 12px !important;
-    width: 100% !important;
-    margin-bottom: 25px !important;
-}}
-.telemetri-card-new {{
-    flex: 1 !important;
-    min-width: 100px !important;
-    background: #0f172a !important;
-    border: 1px solid #1e293b !important;
-    border-radius: 12px !important;
-    padding: 12px 8px !important;
-    text-align: center !important;
-    transition: all 0.3s ease !important;
-}}
-.telemetri-card-new:hover {{
-    border-color: #3b82f6 !important;
-    transform: translateY(-2px) !important;
-    background: #111827 !important;
-}}
-.tel-icon-new {{
-    font-size: 20px !important;
-    margin-bottom: 4px !important;
-}}
-.tel-label-new {{
-    font-size: 10px !important;
-    color: #64748b !important;
-    text-transform: uppercase !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.5px !important;
-}}
-.tel-value-new {{
-    font-size: 18px !important;
-    font-weight: 700 !important;
-    color: #f1f5f9 !important;
-    margin-top: 2px !important;
-    font-family: 'Courier New', monospace !important;
-}}
-.tel-delta-new {{
-    font-size: 10px !important;
-    margin-top: 2px !important;
-    font-weight: bold !important;
-}}
-</style>
+# --- 2. HARİTA VE TELSİZ YERLEŞİMİ ---
 
-<div class="sahin-telemetri-flex-container">
-    <div class="telemetri-card-new">
-        <div class="tel-icon-new">🌡️</div>
-        <div class="tel-label-new">SICAKLIK</div>
-        <div class="tel-value-new">{sicaklik}°C</div>
-        <div class="tel-delta-new">{sicaklik_delta}</div>
-    </div>
-    <div class="telemetri-card-new">
-        <div class="tel-icon-new">💧</div>
-        <div class="tel-label-new">NEM ORANI</div>
-        <div class="tel-value-new">%{nem}</div>
-        <div class="telemetri-card-new" style="display:none;"></div> <div class="tel-delta-new">{nem_delta}</div>
-    </div>
-    <div class="telemetri-card-new">
-        <div class="tel-icon-new">💨</div>
-        <div class="tel-label-new">RÜZGAR</div>
-        <div class="tel-value-new">{ruzgar} <span style='font-size:10px;'>km/s</span></div>
-        <div class="tel-delta-new" style="color:#3b82f6;">YÖN: {koordinat['yon']}</div>
-    </div>
-    <div class="telemetri-card-new">
-        <div class="tel-icon-new">🌫️</div>
-        <div class="tel-label-new">DUMAN (PPM)</div>
-        <div class="tel-value-new">{duman}</div>
-        <div class="tel-delta-new">{duman_delta}</div>
-    </div>
-    <div class="telemetri-card-new">
-        <div class="tel-icon-new">🍃</div>
-        <div class="tel-label-new">HAVA KALİTESİ</div>
-        <div class="tel-value-new">HKE {hke}</div>
-        <div class="tel-delta-new" style="color:#10b981;">STABİL</div>
-    </div>
-    <div class="telemetri-card-new">
-        <div class="tel-icon-new">⛰️</div>
-        <div class="tel-label-new">ARAZİ EĞİMİ</div>
-        <div class="tel-value-new">{egim}°</div>
-        <div class="tel-delta-new" style="color:#64748b;">SABİT</div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+col_harita, col_telsiz = st.columns([1, 1])
+
+with col_harita:
+    st.markdown("### 🗺️ Saha Operasyon Haritası")
+    m = haritayi_olustur_sanliurfa(ILCELER)
+    st_folium(m, height=500, use_container_width=True, key="sanliurfa_map")
+
+# Telsiz kısmını daha fazla veri ile doldurup CSS ile aşağıya doğru esnetiyoruz
+
+with col_telsiz:
+    st.markdown("### 📻 Telsiz Akışı")
+    
+    # 1. Önce listeyi tanımla (Bu hata çözümüdür)
+    telsiz_mesajlari = [
+        f"[{datetime.now().strftime('%H:%M:%S')}] {ilce_adi} devriyesi aktif.",
+        f"[{datetime.now().strftime('%H:%M:%S')}] Sensörler stabil.",
+        "[MERKEZ] Hava desteği hazır.",
+        "[SİSTEM] Akçakale taraması başladı.",
+        "[BİLGİ] Meteorolojik veri güncellendi.",
+        "[UYARI] Ceylanpınar sinyal zayıf.",
+        "[MERKEZ] Raporları iletin.",
+        "[SİSTEM] Senkronizasyon tamam."
+    ]
+    
+    # 2. Mesajları döngü ile işleyip HTML içine ekle
+    mesajlar_html = ""
+    for msg in telsiz_mesajlari:
+        # Renkleri burada uygula
+        renkli_msg = msg
+        if "[MERKEZ]" in renkli_msg: renkli_msg = renkli_msg.replace("[MERKEZ]", "<span class='merkez'>[MERKEZ]</span>")
+        if "[SİSTEM]" in renkli_msg: renkli_msg = renkli_msg.replace("[SİSTEM]", "<span class='sistem'>[SİSTEM]</span>")
+        if "[UYARI]" in renkli_msg: renkli_msg = renkli_msg.replace("[UYARI]", "<span class='uyari'>[UYARI]</span>")
+        if "[BİLGİ]" in renkli_msg: renkli_msg = renkli_msg.replace("[BİLGİ]", "<span class='bilgi'>[BİLGİ]</span>")
+        
+        # İşlenmiş mesajı HTML bloğuna ekle
+        mesajlar_html += f"<div class='telsiz-mesaj' style='margin-bottom: 8px;'>{renkli_msg}</div>"
+    
+    # 3. Paneli render et
+    st.markdown(f"""
+        <div class="akis-paneli">
+            <div style='display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; padding: 10px;'>
+                {mesajlar_html}
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+    
+ 
+
+
+
 
 # ==============================================================================
-
-# SEKMELER TANIMI
-sekme_operasyon, sekme_grafik, sekme_veritabani, sekme_gonullu, sekme_lora = st.tabs([
-    "🚒 Canlı Aksiyon Operasyonu",
+# OPERASYON SEKME DÜZENİ
+# ==============================================================================
+sekme_operasyon, sekme_grafik, sekme_veritabani, sekme_lora, sekme_gonullu = st.tabs([
+    "🚒 Canlı Aksiyon & Saha Koordinasyon Merkezi",
     "📈 Geçmiş Risk Analizi",
     "📋 Sistem Günlük Kayıtları",
-    "🌱 Haydi Umut Ol! (Doğa & Gönüllülük)",
-    "🤖 LoRA Kontrol & Eğitim"
+    "🤖 LoRA Kontrol & Eğitim",
+    "🌱 Haydi Umut Ol! (Doğa & Gönüllülük)"
 ])
-
-# ==============================================================================
-# 1. SEKME: OPERASYON MERKEZİ 
-# ==============================================================================
+with sekme_operasyon:
+         col_sol, col_sag = st.columns([2, 1], gap="medium")
 with sekme_operasyon:
     st.markdown("### 🚒 Canlı Aksiyon & Saha Koordinasyon Merkezi")
-
-    # Termal ve Telsiz için ana kolonlar
-    col_sol, col_sag = st.columns([2, 1])
-
-    with col_sol:
+    
+    col_sol, col_sag = st.columns([2, 1], gap="medium")
+    
+    with col_sol:        
+        # SESLİ UYARI MANTIĞINI DİNAMİK YAP
+        if seviye == "KRİTİK": # 'YÜKSEK' yerine dinamik 'seviye' değişkenini kullan
+            st.error("🚨 KRİTİK RİSK ALGILANDI!")
+            sahin_seslendir("Dikkat! Yüksek risk.")
+            sahin_uyar()
         st.markdown(f"""
-        <div class="termal-container-box">
-            <div class="termal-header">🔴 CANLI TERMAL VE SENSÖR MATRİSİ</div>
-            <div class="termal-grid-layout">
-                <div class="termal-stat-item">
-                    <div class="termal-stat-label">Mod</div>
-                    <div class="termal-stat-val">Kızılötesi (IR)</div>
-                </div>
-                <div class="termal-stat-item">
-                    <div class="termal-stat-label">Sıcaklık</div>
-                    <div class="termal-stat-val" style="color:#ef4444;">{sicaklik} °C <small>↗</small></div>
-                </div>
-                <div class="termal-stat-item">
-                    <div class="termal-stat-label">Duman</div>
-                    <div class="termal-stat-val">{duman} PPM</div>
-                </div>
-                <div class="termal-stat-item">
-                    <div class="termal-stat-label">Sinyal</div>
-                    <div class="termal-stat-val">%98</div>
-                </div>
-                <div class="termal-stat-item">
-                    <div class="termal-stat-label">Risk Seviyesi</div>
-                    <div class="termal-stat-val" style="color:#f59e0b;">{seviye}</div>
-                </div>
-                <div class="termal-stat-item">
-                    <div class="termal-stat-label">Emisyon</div>
-                    <div class="termal-stat-val">0.95</div>
-                </div>
-                <div class="termal-stat-item" style="grid-column: span 2;">
-                    <div class="termal-stat-label">Algoritma Durumu</div>
-                    <div class="termal-stat-val" style="color:#3b82f6;">ŞAHİN v2.0 - AKTİF</div>
-                </div>
+        <div style="width: 100%; border: 2px solid #333; padding: 20px; border-radius: 15px; background-color: #0e1117;">
+            <h4 style="color: #ff4b4b;">🔴 CANLI TERMAL VE SENSÖR MATRİSİ</h4>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div><small>Sıcaklık</small><br><strong>{sicaklik} °C</strong></div>
+                <div><small>Duman</small><br><strong>{duman} PPM</strong></div>
+                <div><small>Risk Seviyesi</small><br><strong style="color: #ff4b4b;">{seviye}</strong></div>
             </div>
         </div>
         """, unsafe_allow_html=True)
-      
-    with col_sag:
-        st.markdown("### 📻 Telsiz Akışı")
-        st.code(f"""[{datetime.now().strftime('%H:%M:%S')}] {ilce_adi} devriyesi aktif.
-[{datetime.now().strftime('%H:%M:%S')}] Sensörler stabil.
-[MERKEZ] Hava desteği hazır.""", language="text")
+          
         
-        b1, b2 = st.columns(2)
-        if b1.button("🚨 AFAD Rapor", use_container_width=True):
-            st.toast("Rapor iletildi", icon="📡")
-        if b2.button("🚒 Rota", use_container_width=True):
-            st.toast("Rota hesaplandı", icon="🗺️")
-  
-
-# --- GRAFİK BÖLÜMÜ ---
-secili_ilce = st.session_state.get("ilçe_adi", "Haliliye")
-st.markdown(f"### 📈 {secili_ilce} İlçesi Detaylı Risk Analiz Grafikleri")
-df_grafik = pd.DataFrame(st.session_state.gecmis_risk).set_index("Saat")
-st.line_chart(df_grafik, use_container_width=True, color=["#ff3366", "#3b82f6"])
-
-# --- GRAFİK BÖLÜMÜ ---
-secili_ilce = st.session_state.get("ilce_adi", "Haliliye")
-st.markdown(f"### 📈 {secili_ilce} İlçesi Detaylı Risk Analiz Grafikleri")
-
-df_grafik = pd.DataFrame(st.session_state.gecmis_risk).set_index("Saat")
-st.line_chart(df_grafik, use_container_width=True)
-
-with st.container(border=True):
-    st.markdown(f"💡 **Yapay Zeka Raporu:** {secili_ilce} bölgesi için veriler stabil.")
-
 # ==============================================================================
 # 2. SEKME: GRAFİK ANALİZLERİ
 # ==============================================================================
 with sekme_grafik:
-    # İlçe adını güvenli bir şekilde al
+    # 1. İlçe adını session_state'den güvenli al
     secili_ilce = st.session_state.get("ilce_adi", "Haliliye")
+    
     st.markdown(f"### 📈 {secili_ilce} İlçesi Detaylı Risk Analiz Grafikleri")
     
-    # DataFrame oluşturma ve Grafik
-    df_grafik = pd.DataFrame(st.session_state.gecmis_risk).set_index("Saat")
-    st.line_chart(df_grafik, use_container_width=True, color=["#ff3366", "#3b82f6"])
+    # 2. DataFrame oluşturma
+    # Hata almamak için verinin varlığını kontrol ediyoruz
+    if "gecmis_risk" in st.session_state and len(st.session_state.gecmis_risk) > 0:
+        df_grafik = pd.DataFrame(st.session_state.gecmis_risk)
+        
+        # Eğer 'Saat' index değilse set_index yapıyoruz
+        if "Saat" in df_grafik.columns:
+            df_grafik = df_grafik.set_index("Saat")
+            
+        # 3. Grafik Çizimi
+        st.line_chart(df_grafik, use_container_width=True, color=["#ff3366", "#3b82f6"])
+    else:
+        st.warning("Henüz grafik için yeterli veri yok.")
     
-    # Rapor kutusu (Mükerrer olanı tek bir yapıya indirdik)
+    # 4. Yapay Zeka Raporu Kutusu (Girintisi düzeltildi)
     with st.container(border=True):
         st.markdown(f"""
         💡 **Yapay Zeka Raporu:** {secili_ilce} bölgesi için son veriler incelendiğinde, 
         anlık risk faktörünün tepe noktasına saat **{datetime.now().strftime('%H:%M')}** itibariyle 
-        ulaştığı tespit edilmiştir. Meteorolojik ısınma eğrisi ve sensör telemetrileri yakından izlenmektedir.
+        ulaştığı tespit edilmiştir. Meteorolojik ısınma eğrisi ve sensör telemetrileri 
+        ŞAHİN tarafından yakından izlenmektedir.
         """)
-
 # ==============================================================================
 # 3. SEKME: SİSTEM GÜNLÜK KAYITLARI
 # ==============================================================================
@@ -741,8 +704,11 @@ with sekme_veritabani:
     st.subheader("📋 Yapay Zeka Komuta & Sistem Günlük Kayıtları (System Logs)")
     st.caption("ŞAHİN asistanının ve saha operatörlerinin sisteme işlediği anlık aksiyon veri tabanı.")
     
-    if st.session_state.veri_log:
-        df_log = pd.DataFrame(st.session_state.veri_log)
+    # 'veri_log' session_state içinde yoksa hata vermemesi için güvenli kontrol
+    logs = st.session_state.get("veri_log", [])
+    
+    if logs:
+        df_log = pd.DataFrame(logs)
         st.dataframe(
             df_log, 
             use_container_width=True, 
@@ -760,47 +726,11 @@ with sekme_veritabani:
             st.rerun()
     else:
         st.info("ℹ️ Sistemde kayıtlı herhangi bir günlük kaydı bulunmamaktadır.")
-
 # ==============================================================================
-# 4. SEKME: GÖNÜLLÜLÜK VE DOĞA SEVGİSİ
+# 4. SEKME: LoRA YÖNETİM PANELİ
 # ==============================================================================
-    with sekme_gonullu:
-     st.markdown("### 💚 Haydi Umut Ol! Doğa ve Gönüllülük Seferberliği")
-     st.markdown("<p style='color: #94a3b8;'>Yangın tehlikelerine karşı sadece teknolojiyle değil, toplumsal dayanışmayla da savaşıyoruz. Geleceğe nefes olmak için aşağıdaki aksiyonlara katılabilirsiniz.</p>", unsafe_allow_html=True)
-    
-    g_col1, g_col2, g_col3 = st.columns(3)
-    g_col1.metric("🌲 Toplam Bağışlanan Fidan", "4,218 Adet", "+120 Bugün")
-    g_col2.metric("🤝 Aktif Şanlıurfa Gönüllüsü", "846 Kişi", "+14 Bu Hafta")
-    g_col3.metric("🏫 Yapılan Farkındalık Eğitimi", "18 Seminer", "AFAD Koordinasyonlu")
-    
-    st.write("---")
-    col_card1, col_card2 = st.columns(2, gap="large")
-
-    with col_card1:
-        with st.container(border=True):
-            st.markdown("<h4 style='color:#00C853; margin-top:0;'>🌲 Yeşil Şanlıurfa Fidan Bağışı Kampanyası</h4>", unsafe_allow_html=True)
-            st.write("Yapay zekanın yüksek risk veya hasar tespit ettiği bölgelerin yeniden ağaçlandırılması için fidan bağışında bulunabilirsiniz.")
-            st.markdown("<small style='color:#888;'><b>SMS ile Destek:</b> FİDAN yazıp 1866'ya göndererek OGEM-VAK'a destek olabilirsiniz.</small>", unsafe_allow_html=True)
-            st.write("")
-            if st.button("🌱 Fidan Bağışında Bulun (Simüle Et)", use_container_width=True, key="fidan_bagis_btn"):
-                st.balloons()
-                st.success("Harika! Geleceğe nefes olmak adına fidan bağışı simülasyonu tetiklendi! 🌱")
-
-    with col_card2:
-        with st.container(border=True):
-            st.markdown("<h4 style='color:#00838F; margin-top:0;'>🤝 Bölgesel Doğa ve Yangın Gönüllüsü Ol</h4>", unsafe_allow_html=True)
-            st.write("Şanlıurfa ve çevresinde olası acil durumlarda ekiplere lojistik, erzak ve farkındalık desteği sağlamak için AFAD gönüllü ağına katılın.")
-            st.markdown("<small style='color:#888;'>Saha koordinasyon ekipleriyle anlık iletişim ve hazırlık eğitimleri.</small>", unsafe_allow_html=True)
-            st.write("")
-            if st.button("🤝 Gönüllü Kayıt Formunu Gönder", use_container_width=True, key="gonullu_kayit_btn"):
-                st.toast("Gönüllü kaydınız Şanlıurfa Yerel AFAD Gönüllü Veritabanına işlendi!", icon="🤝")
-                st.info("Tebrikler! Sistem sorumluları sizinle en kısa sürede iletişime geçecektir.")
-
-# ==============================================================================
-# 5. SEKME: LoRA YÖNETİM PANELİ
-# ==============================================================================
-    with sekme_lora:
-     st.subheader("🦅 ŞAHİN Yapay Zeka LoRA Adaptör Yönetimi")
+with sekme_lora:
+    st.subheader("🦅 ŞAHİN Yapay Zeka LoRA Adaptör Yönetimi")
     st.caption("ŞAHİN v2.5 modeline yeni yangın senaryoları öğretmek için LoRA ağırlıklarını yükleyin, eğitin ve kontrol edin.")
     st.write("---")
     
@@ -874,12 +804,49 @@ with sekme_veritabani:
                 st.session_state.aktif_lora = secilen_lora
                 st.toast(f"🔗 {secilen_lora} aktif edildi!", icon="🤖")
                 st.rerun()
-            
+        
         st.write("")
         with st.container(border=True):
             st.markdown("<h4 style='color: #10b981; margin-top:0;'>📜 LoRA Eğitim Günlükleri</h4>", unsafe_allow_html=True)
-            if st.session_state.lora_gecmisi:
+            if st.session_state.get("lora_gecmisi"):
                 df_lora = pd.DataFrame(st.session_state.lora_gecmisi)
                 st.dataframe(df_lora, use_container_width=True, hide_index=True)
             else:
-                st.info("ℹ️ Henüz sistemde kayıtlı bir LoRA eğitim günlüğü bulunmuyor.")
+                st.info("ℹ️ Henüz sistemde kayıtlı bir LoRA eğitim günlüğü bulunmuyor.")        
+# ==============================================================================
+# 5. SEKME: GÖNÜLLÜLÜK VE DOĞA SEVGİSİ
+# ==============================================================================
+with sekme_gonullu:
+    st.markdown("### 💚 Haydi Umut Ol! Doğa ve Gönüllülük Seferberliği")
+    st.markdown("<p style='color: #94a3b8;'>Yangın tehlikelerine karşı sadece teknolojiyle değil, toplumsal dayanışmayla da savaşıyoruz. Geleceğe nefes olmak için aşağıdaki aksiyonlara katılabilirsiniz.</p>", unsafe_allow_html=True)
+    
+    # Tüm elemanlar 'with sekme_gonullu' bloğunun içine alındı
+    g_col1, g_col2, g_col3 = st.columns(3) 
+    g_col1.metric("🌲 Toplam Bağışlanan Fidan", "4,218 Adet", "+120 Bugün")
+    g_col2.metric("🤝 Aktif Şanlıurfa Gönüllüsü", "846 Kişi", "+14 Bu Hafta")
+    g_col3.metric("🏫 Yapılan Farkındalık Eğitimi", "18 Seminer", "AFAD Koordinasyonlu")
+    
+    st.write("---")
+    col_card1, col_card2 = st.columns(2, gap="large")
+
+    with col_card1:
+        with st.container(border=True):
+            st.markdown("<h4 style='color:#00C853; margin-top:0;'>🌲 Yeşil Şanlıurfa Fidan Bağışı Kampanyası</h4>", unsafe_allow_html=True)
+            st.write("Yapay zekanın yüksek risk veya hasar tespit ettiği bölgelerin yeniden ağaçlandırılması için fidan bağışında bulunabilirsiniz.")
+            st.markdown("<small style='color:#888;'><b>SMS ile Destek:</b> FİDAN yazıp 1866'ya göndererek OGEM-VAK'a destek olabilirsiniz.</small>", unsafe_allow_html=True)
+            st.write("")
+            if st.button("🌱 Fidan Bağışında Bulun", use_container_width=True, key="fidan_bagis_btn"):
+                st.balloons()
+                st.success("Harika! Geleceğe nefes olmak adına fidan bağışı gerçekleşti! 🌱")
+
+    with col_card2:
+        with st.container(border=True):
+            st.markdown("<h4 style='color:#00838F; margin-top:0;'>🤝 Bölgesel Doğa ve Yangın Gönüllüsü Ol</h4>", unsafe_allow_html=True)
+            st.write("Şanlıurfa ve çevresinde olası acil durumlarda ekiplere lojistik, erzak ve farkındalık desteği sağlamak için AFAD gönüllü ağına katılın.")
+            st.markdown("<small style='color:#888;'>Saha koordinasyon ekipleriyle anlık iletişim ve hazırlık eğitimleri.</small>", unsafe_allow_html=True)
+            st.write("")
+            if st.button("🤝 Gönüllü Kayıt Formunu Gönder", use_container_width=True, key="gonullu_kayit_btn"):
+                st.toast("Gönüllü kaydınız Şanlıurfa Yerel AFAD Gönüllü Veritabanına işlendi!", icon="🤝")
+                st.info("Tebrikler! Sistem sorumluları sizinle en kısa sürede iletişime geçecektir.")
+
+
