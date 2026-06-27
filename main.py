@@ -1,28 +1,34 @@
-# ==================== IMPORTLAR ====================
 import requests
 import pandas as pd
 import streamlit as st
 import os
 import json
 import asyncio
-import pandas as pd
 import numpy as np
-import streamlit as st
 import folium
-import warnings  # <--- İşte bu satır eksikti!
+import warnings
 from datetime import datetime, timedelta
 from streamlit_folium import st_folium
 from streamlit_autorefresh import st_autorefresh
-import speech_recognition as sr
-import pyttsx3 
 import edge_tts
 import base64
+
+
+warnings.filterwarnings("ignore")
+
+
+# ================= SESSION STATE =================
 
 if 'sahin_konustu_mu' not in st.session_state:
     st.session_state.sahin_konustu_mu = False
 
+if "son_ses" not in st.session_state:
+    st.session_state.son_ses = ""
 
-# Session State tanımlamaları (Hataları önlemek için)
+if "son_veri_zamani" not in st.session_state:
+    st.session_state.son_veri_zamani = datetime.now() - timedelta(seconds=10)
+
+
 if "gecmis_risk" not in st.session_state:
     st.session_state.gecmis_risk = [
         {"Saat": "17:00", "Merkez Bölge Risk (%)": 35, "Saha Genel Risk (%)": 50},
@@ -31,10 +37,6 @@ if "gecmis_risk" not in st.session_state:
         {"Saat": "17:45", "Merkez Bölge Risk (%)": 45, "Saha Genel Risk (%)": 50},
         {"Saat": "18:00", "Merkez Bölge Risk (%)": 27, "Saha Genel Risk (%)": 50}
     ]
-if "ilce_adi" not in st.session_state:
-    st.session_state.ilce_adi = "Haliliye"
-
-warnings.filterwarnings("ignore")
 
 # Proje dizininde LoRA klasörlerini otomatik oluşturma tanımları
 LORA_DIR = "lora_weights"
@@ -55,14 +57,6 @@ if "veri_log" not in st.session_state:
         {"Zaman": (datetime.now() - timedelta(hours=8)).strftime("%H:%M:%S"), "İlçe": "Birecik", "Risk": "%74", "Aksiyon": "Hava Keşfi İstendi", "Durum": "⚠️ UYARI"}
     ]
 
-if "gecmis_risk" not in st.session_state:
-    # Grafik sekmesini besleyecek geriye dönük 12 saatlik Şanlıurfa genel risk trend verisi
-    saatler = [(datetime.now() - timedelta(hours=i)).strftime("%H:00") for i in range(12, 0, -1)]
-    st.session_state.gecmis_risk = {
-        "Saat": saatler,
-        "Merkez Bölge Risk (%)": [35, 38, 42, 45, 52, 60, 68, 65, 58, 50, 48, 42],
-        "Kritik Sınır Eşiği": [50] * 12
-    }
 
 if "aktif_lora" not in st.session_state:
     st.session_state.aktif_lora = "Yok (Taban Model)"
@@ -113,9 +107,8 @@ st.set_page_config(
 # ==============================================================================
 # ŞAHİN ASYNC SES MOTORU (EDGE-TTS)
 # ==============================================================================
-# ŞAHİN'e anlık risk değerini fonksiyona gönderirken parametre olarak veriyoruz
 def sahin_analiz_et(soru, sicaklik, risk, ilce):
-    # Sabit "yüksek risk" uyarısı yerine, gelen 'risk' değerini kullan
+    
     if risk >= 75:
         durum = "KRİTİK"
     elif risk >= 50:
@@ -137,20 +130,35 @@ def sahin_uyar():
     if os.path.exists("alarm.mp3"):
         st.audio("alarm.mp3", format='audio/mp3', autoplay=True)
 def sahin_seslendir(cevap_metni):
-    
+
+    if st.session_state.get("son_ses","") == cevap_metni:
+        return
+
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        ses_verisi = loop.run_until_complete(amain(cevap_metni))
+
+        ses_verisi = loop.run_until_complete(
+            amain(cevap_metni)
+        )
+
         loop.close()
-        
+
         b64_ses = base64.b64encode(ses_verisi).decode("utf-8")
+
         ses_html = f"""
-            <audio autoplay style="display:none;">
-                <source src="data:audio/mp3;base64,{b64_ses}" type="audio/mp3">
-            </audio>
+        <audio autoplay>
+            <source src="data:audio/mp3;base64,{b64_ses}">
+        </audio>
         """
-        st.markdown(ses_html, unsafe_allow_html=True)
+
+        st.markdown(
+            ses_html,
+            unsafe_allow_html=True
+        )
+
+        st.session_state.son_ses = cevap_metni
+
 
     except Exception as e:
         st.error(f"⚠️ Seslendirme motoru hatası: {e}")
@@ -174,18 +182,17 @@ def log_kaydet(ilce, risk_val, seviye_str, aksiyon):
         "İlçe": ilce,
         "Risk": f"%{risk_val}",
         "Aksiyon": aksiyon,
-        "Durum": seviye_str  # 'durum_str' yerine 'seviye_str' kullanmalısın
+        "Durum": seviye_str  # 'durum_str' yerine 'seviye_str' 
     }
     st.session_state.veri_log.append(yeni_log)
     if len(st.session_state.veri_log) > 50:
         st.session_state.veri_log = st.session_state.veri_log[-50:]
 
+
 # ==============================================================================
-# GÜVENLİ VE OTOMATİK FREKANS TARAMALI DİNLEME MOTORU
+# ŞAHİN RAPORLAMA FONKSİYONU 
 # ==============================================================================
-# ==============================================================================
-# ŞAHİN RAPORLAMA FONKSİYONU (Bunu kodunun en üstündeki fonksiyonların arasına ekle)
-# ==============================================================================
+
 def sahin_raporla(ilce_adi, risk, sicaklik, seviye):
     rapor_metni = (
         f"Şahin durum raporu. {ilce_adi} bölgesinde anlık sensör verileri; "
@@ -196,10 +203,8 @@ def sahin_raporla(ilce_adi, risk, sicaklik, seviye):
     sahin_seslendir(rapor_metni)
 
 # ==============================================================================
-# POPOVER KISMI (Kodundaki eski popover bloğunu bununla değiştir)
+# POPOVER KISMI 
 # ==============================================================================
-# 1. HATA VEREN 416. SATIRDAKİ 'sahin_dinle' SATIRINI BUL VE SİL!
-# 2. POP-OVER BLOĞUNU ŞU ŞEKİLDE GÜNCELLE:
 
 if "risk" not in st.session_state:
     st.session_state.risk = 0
@@ -211,7 +216,7 @@ with st.popover(" "):
     st.subheader("📡 ŞAHİN Kontrol Merkezi")
     
     if st.button("📢 Güncel Durumu Seslendir"):
-        # Hata almamak için session_state'den çekiyoruz
+        # Hata almamak için session_state'den çekim
         metin = (f"Şahin durum raporu. {st.session_state.ilce_adi} bölgesinde anlık veriler; "
                  f"sıcaklık {st.session_state.sicaklik} derece, risk seviyesi yüzde {st.session_state.risk}. "
                  f"Durum: {st.session_state.seviye}.")
@@ -224,7 +229,7 @@ with st.popover(" "):
         st.text_area("Rapor:", value=rapor, height=150)
         st.download_button("💾 İndir", rapor, "rapor.txt")
 # ==============================================================================
-# MODERN CSS
+# CSS stil tanımları
 # ==============================================================================
 st.markdown("""
 <style>
@@ -304,14 +309,7 @@ else:
     risk = int(max(10, min((sicaklik * 1.0) - (nem * 0.5) + (ruzgar * 0.3), 44)))
     seviye, ikon = "DÜŞÜK", "✅"
 
-# --- OTOMATİK UYARI SADECE SEVİYEYE BAĞLI OLSUN ---
-if seviye == "KRİTİK" and not st.session_state.sahin_konustu_mu:
-    sahin_seslendir(f"Dikkat, {ilce_adi} bölgesinde kritik seviyede risk algılandı!")
-    st.session_state.sahin_konustu_mu = True
-elif seviye == "DÜŞÜK":
-    st.session_state.sahin_konustu_mu = False
-
-# 3. TEK BİR BANNER BLOĞU (En son, hesaplamalar bittikten sonra)
+# 3. TEK BİR BANNER BLOĞU 
 st.markdown("""
 <style>
 .main-banner { background: #0f172a; padding: 20px; border-radius: 12px; display: flex; justify-content: space-between; margin-bottom: 20px; color: white; border: 1px solid #334155; }
@@ -325,35 +323,32 @@ st.markdown(f"""
     <div class="data-box"><div>📍</div><div>Bölge<br><span class="value">{ilce_adi}</span></div></div>
     <div class="data-box"><div>{ikon}</div><div>Risk<br><span class="value">%{risk}</span></div></div>
     <div class="data-box"><div>⚙️</div><div>Durum<br><span class="value">{seviye}</span></div></div>
-    <div class="data-box"><div>🚒</div><div>Merkez<br><span class="value">{koordinat.get('merkez', 'BELİRSİZ')}</span></div></div>
-</div>
+   <div class="data-box"><div>🚒</div><div>Müdahale Birimi<br><span class="value">{koordinat.get('itfaiye', 'Saha Ekibi')}</span>
+</div></div></div>
 """, unsafe_allow_html=True)
 
 
 
+# ==============================================================================
 
-# ==================== 🔥 SÖZLÜK UYUMLU DOĞRU AKTARIM ADIMI 🔥 ====================
-log_kaydet(ilce_adi, risk, seviye, "Sistem Taraması")
+simdi = datetime.now().strftime("%H:%M:%S")
+if st.session_state.son_veri_zamani != simdi:
 
-baska_bir_deger = 50
-yeni_veri = {
-    "Saat": datetime.now().strftime("%H:%M:%S"),
-    "Merkez Bölge Risk (%)": risk,
-    "Saha Genel Risk (%)": baska_bir_deger # Varsa diğer değeriniz
-}
-st.session_state.gecmis_risk.append(yeni_veri)
+    log_kaydet(ilce_adi, risk, seviye, "Sistem Taraması")
 
-# Bellek koruması (Max 50)
-# 1. Listeyi DataFrame'e çevir
-df_kontrol = pd.DataFrame(st.session_state.gecmis_risk)
+    yeni_veri = {
+        "Saat": simdi,
+        "Merkez Bölge Risk (%)": risk,
+        "Saha Genel Risk (%)": 50
+    }
 
-# 2. DataFrame üzerinden kontrol et
-if len(df_kontrol) > 50:
-    # Eğer 50 satırı geçtiyse, en eskiyi sil (isteğe bağlı)
-    st.session_state.gecmis_risk.pop(0)
-    st.session_state.gecmis_risk["Merkez Bölge Risk (%)"] = st.session_state.gecmis_risk["Merkez Bölge Risk (%)"][-50:]
-    st.session_state.gecmis_risk["Saat"] = st.session_state.gecmis_risk["Saat"][-50:]
-    st.session_state.gecmis_risk["Kritik Sınır Eşiği"] = st.session_state.gecmis_risk["Kritik Sınır Eşiği"][-50:]
+    st.session_state.gecmis_risk.append(yeni_veri)
+
+    # Maksimum 50 kayıt tut
+    if len(st.session_state.gecmis_risk) > 50:
+        st.session_state.gecmis_risk.pop(0)
+
+    st.session_state.son_veri_zamani = simdi
 
 # INTERNET KONTROLÜ
 if not internet_var_mi():
@@ -367,11 +362,11 @@ else:
 # 🚀 PROFEOSYONEL OGM KOMUTA BANNERI VE KONTROL PANELİ
 # ==============================================================================
 
-# İnternet kontrolünü zaten yapmıştık, sadece durumu belirleyelim
+# İnternet kontrolü var  sadece durumu belirltmek için
 kaynak = "📡 Canlı" if internet_var_mi() else "💾 Önbellek"
 
 
-# Renk tanımları (Zaten Banner'da kullanıyoruz, burada sadece değişken olarak kalsın)
+# Renk tanımları 
 if risk >= 75:
     neon_renk = "#ef4444"
 elif risk >= 45:
@@ -381,13 +376,11 @@ else:
 
 st.sidebar.success(f"Bağlantı: {kaynak}")
 
-
-# --- ŞAHİN İLETİŞİM MERKEZİ VE TÜM STİLLER ---
-
+#==============================================================================
+#ŞAHİN ROBOT STİLİ VE GÖRSELİ
 
 st.markdown("""
 <style>
-/* 1. Dönen Mavi Işıklı Logo (Görsel Katman) */
 @keyframes spin { 100% { transform: rotate(360deg); } }
 .sahin-gorsel {
     position: fixed; bottom: 30px; right: 30px; z-index: 999;
@@ -408,13 +401,13 @@ st.markdown("""
 <div class="sahin-gorsel">🦅</div>
 """, unsafe_allow_html=True)
 
-# 1. HESAPLAMA BLOĞUNUN EN SONUNA EKLE (Değişkenler her an güncel olsun diye)
+# 1. HESAPLAMA BLOĞUNUNDAN SONRA GELEMLİ 
 st.session_state.ilce_adi = ilce_adi
 st.session_state.risk = risk
 st.session_state.sicaklik = sicaklik
 st.session_state.seviye = seviye
 
-# 2. ŞAHİN BUTON VE MENÜ BLOĞU (Bunu sayfanın herhangi bir yerine koy)
+# 2. ŞAHİN BUTON VE MENÜ BLOĞU
 st.markdown("""
 <style>
 /* 1. Kendi logon zaten dönüyor, biz popover'ı onun üzerine çiviliyoruz */
@@ -443,13 +436,13 @@ with st.popover(" "):
         rapor_txt = f"--- ŞAHİN RAPORU ---\nBölge: {st.session_state.ilce_adi}\nRisk: %{st.session_state.risk}\nSıcaklık: {st.session_state.sicaklik}C\nDurum: {st.session_state.seviye}"
         st.text_area("Rapor:", value=rapor_txt, height=150)
         st.download_button("💾 İndir", rapor_txt, "rapor.txt")
-#===============================
-# 3. CANLI AKSİYON VE TERMAL VERİ BESLEMESİ (Bozuk Kodlar Ayıklandı)
+# ==============================================================================
+# CANLI AKSİYON VE TERMAL VERİ AKIŞ PANELİ
 # ==============================================================================
 st.markdown("### 🚨 Saha Koordinasyon Merkezi")
 st.info(f"📍 Aktif Gözlem Bölgesi: **{ilce_adi}** | Durum: **{seviye}**")
 
-# 2. ÜST METRİKLER (Durum Göstergeleri)
+# DURUM GÖSTERGELERİ
 col_op1, col_op2, col_op3 = st.columns(3)
 with col_op1:
     st.metric("🚨 Operasyon Durumu", seviye, delta="Aktif Takip")
@@ -462,16 +455,12 @@ with col_op3:
 col_main1, col_main2 = st.columns([5, 4])
 
 
-
-   
-# (Kontrol Merkezi) - artık Operasyon sekmesi içinde tek noktadan yönetiliyor.
-
 # ==============================================================================
-# 🏢 YENİ NESİL OGM KOMUTA BANNERI RENDER
+# 🏢 YENİ NESİL OGM KOMUTA BANNERI 
 # ==============================================================================
 
 
-# 2. ROBOT VE HARİTA COLUMNS (Dengeli Yükseklik Ayarıyla)
+# ROBOT VE HARİTA COLUMNS
 c1, c2 = st.columns([1, 1])
 ses = None 
 
@@ -535,10 +524,6 @@ st.markdown("""
 # ==============================================================================
 
     
-
-
-
-
 @st.cache_resource(show_spinner=False)
 def haritayi_olustur(enlem, boylam, risk_degeri, ilce_ismi, itfaiye_merkezi):
     m = folium.Map(location=[enlem, boylam], zoom_start=11)
@@ -552,10 +537,10 @@ def haritayi_olustur(enlem, boylam, risk_degeri, ilce_ismi, itfaiye_merkezi):
     return m
 
 # ==============================================================================
-# 🚒 HARİTA VE TELSİZ KOMUTA PANELİ (Yan Yana)
+# 🚒 HARİTA VE TELSİZ KOMUTA PANELİ 
 # ==============================================================================
 
-# Harita ve Telsiz için kolon yapısı (Harita 2 birim, Telsiz 1 birim yer kaplar)
+# Harita ve Telsiz için kolon yapısı 
 col_harita, col_telsiz = st.columns([2, 1])
 def haritayi_olustur_sanliurfa(ilceler_dict):
     m = folium.Map(location=[37.1674, 38.7952], zoom_start=10)
@@ -568,17 +553,17 @@ def haritayi_olustur_sanliurfa(ilceler_dict):
         ).add_to(m)
     return m
 
-# Hata almamak için her değişkeni önce başlatıyoruz
+# Her değişkeni locals() işle alıyoruz böylece hata oluşmaz
 sicaklik = locals().get('sicaklik', 0)
 nem = locals().get('nem', 0)
 duman = locals().get('duman', 0)
 
-# Şimdi artık hata vermeden çalışırlar:
+
 sicaklik_delta = f"<span style='color:#ef4444;'>🔥 KRİTİK</span>" if sicaklik > 38 else f"<span style='color:#64748b;'>NORMAL</span>"
 nem_delta = f"<span style='color:#ef4444;'>⚠️ DÜŞÜK</span>" if nem < 12 else f"<span style='color:#10b981;'>OPTIMAL</span>"
 duman_delta = f"<span style='color:#ef4444;'>🚨 ANOMALİ</span>" if duman > 200 else f"<span style='color:#10b981;'>TEMİZ</span>"
 
-# --- 2. HARİTA VE TELSİZ YERLEŞİMİ ---
+# HARİTA VE TELSİZ YERLEŞİMİ
 
 col_harita, col_telsiz = st.columns([1, 1])
 
@@ -587,12 +572,11 @@ with col_harita:
     m = haritayi_olustur_sanliurfa(ILCELER)
     st_folium(m, height=500, use_container_width=True, key="sanliurfa_map")
 
-# Telsiz kısmını daha fazla veri ile doldurup CSS ile aşağıya doğru esnetiyoruz
 
 with col_telsiz:
     st.markdown("### 📻 Telsiz Akışı")
     
-    # 1. Önce listeyi tanımla (Bu hata çözümüdür)
+    # Listeyi tanımlama
     telsiz_mesajlari = [
         f"[{datetime.now().strftime('%H:%M:%S')}] {ilce_adi} devriyesi aktif.",
         f"[{datetime.now().strftime('%H:%M:%S')}] Sensörler stabil.",
@@ -604,20 +588,20 @@ with col_telsiz:
         "[SİSTEM] Senkronizasyon tamam."
     ]
     
-    # 2. Mesajları döngü ile işleyip HTML içine ekle
+    # Mesajları döngü ile işleyip HTML içine ekleme
     mesajlar_html = ""
     for msg in telsiz_mesajlari:
-        # Renkleri burada uygula
+        # Renkleme ve stil ekleme
         renkli_msg = msg
         if "[MERKEZ]" in renkli_msg: renkli_msg = renkli_msg.replace("[MERKEZ]", "<span class='merkez'>[MERKEZ]</span>")
         if "[SİSTEM]" in renkli_msg: renkli_msg = renkli_msg.replace("[SİSTEM]", "<span class='sistem'>[SİSTEM]</span>")
         if "[UYARI]" in renkli_msg: renkli_msg = renkli_msg.replace("[UYARI]", "<span class='uyari'>[UYARI]</span>")
         if "[BİLGİ]" in renkli_msg: renkli_msg = renkli_msg.replace("[BİLGİ]", "<span class='bilgi'>[BİLGİ]</span>")
         
-        # İşlenmiş mesajı HTML bloğuna ekle
+        # İşlenmiş mesajı HTML bloğuna ekleme
         mesajlar_html += f"<div class='telsiz-mesaj' style='margin-bottom: 8px;'>{renkli_msg}</div>"
     
-    # 3. Paneli render et
+    # Paneli render etme
     st.markdown(f"""
         <div class="akis-paneli">
             <div style='display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; padding: 10px;'>
@@ -627,8 +611,6 @@ with col_telsiz:
     """, unsafe_allow_html=True)
     
  
-
-
 
 
 # ==============================================================================
@@ -648,13 +630,13 @@ with sekme_operasyon:
     
     col_sol, col_sag = st.columns([2, 1], gap="medium")
     
-    with col_sol:        
-        # SESLİ UYARI MANTIĞINI DİNAMİK YAP
-        if seviye == "KRİTİK": # 'YÜKSEK' yerine dinamik 'seviye' değişkenini kullan
-            st.error("🚨 KRİTİK RİSK ALGILANDI!")
-            sahin_seslendir("Dikkat! Yüksek risk.")
-            sahin_uyar()
-        st.markdown(f"""
+    with col_sol:   
+             
+        # SESLİ UYARI MANTIĞI 
+        if seviye == "KRİTİK": 
+         st.error("🚨 KRİTİK RİSK ALGILANDI!")
+    sahin_uyar()
+    st.markdown(f"""
         <div style="width: 100%; border: 2px solid #333; padding: 20px; border-radius: 15px; background-color: #0e1117;">
             <h4 style="color: #ff4b4b;">🔴 CANLI TERMAL VE SENSÖR MATRİSİ</h4>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
@@ -670,33 +652,33 @@ with sekme_operasyon:
 # 2. SEKME: GRAFİK ANALİZLERİ
 # ==============================================================================
 with sekme_grafik:
-    # 1. İlçe adını session_state'den güvenli al
+
     secili_ilce = st.session_state.get("ilce_adi", "Haliliye")
-    
+
     st.markdown(f"### 📈 {secili_ilce} İlçesi Detaylı Risk Analiz Grafikleri")
-    
-    # 2. DataFrame oluşturma
-    # Hata almamak için verinin varlığını kontrol ediyoruz
-    if "gecmis_risk" in st.session_state and len(st.session_state.gecmis_risk) > 0:
+
+    if st.session_state.gecmis_risk:
+
         df_grafik = pd.DataFrame(st.session_state.gecmis_risk)
-        
-        # Eğer 'Saat' index değilse set_index yapıyoruz
+
         if "Saat" in df_grafik.columns:
             df_grafik = df_grafik.set_index("Saat")
-            
-        # 3. Grafik Çizimi
-        st.line_chart(df_grafik, use_container_width=True, color=["#ff3366", "#3b82f6"])
+
+        # Sadece sayısal sütunları al
+        df_grafik = df_grafik.select_dtypes(include=["number"])
+
+        st.line_chart(df_grafik, use_container_width=True)
+
     else:
         st.warning("Henüz grafik için yeterli veri yok.")
-    
-    # 4. Yapay Zeka Raporu Kutusu (Girintisi düzeltildi)
+
     with st.container(border=True):
         st.markdown(f"""
-        💡 **Yapay Zeka Raporu:** {secili_ilce} bölgesi için son veriler incelendiğinde, 
-        anlık risk faktörünün tepe noktasına saat **{datetime.now().strftime('%H:%M')}** itibariyle 
-        ulaştığı tespit edilmiştir. Meteorolojik ısınma eğrisi ve sensör telemetrileri 
-        ŞAHİN tarafından yakından izlenmektedir.
-        """)
+💡 **Yapay Zeka Raporu:** {secili_ilce} bölgesi için son veriler incelendiğinde,
+anlık risk faktörünün tepe noktasına saat **{datetime.now().strftime('%H:%M')}**
+itibariyle ulaştığı tespit edilmiştir.
+Meteorolojik ısınma eğrisi ve sensör telemetrileri ŞAHİN tarafından yakından izlenmektedir.
+""")
 # ==============================================================================
 # 3. SEKME: SİSTEM GÜNLÜK KAYITLARI
 # ==============================================================================
@@ -814,13 +796,13 @@ with sekme_lora:
             else:
                 st.info("ℹ️ Henüz sistemde kayıtlı bir LoRA eğitim günlüğü bulunmuyor.")        
 # ==============================================================================
-# 5. SEKME: GÖNÜLLÜLÜK VE DOĞA SEVGİSİ
+# 5. SEKME: GÖNÜLLÜLÜK 
 # ==============================================================================
 with sekme_gonullu:
     st.markdown("### 💚 Haydi Umut Ol! Doğa ve Gönüllülük Seferberliği")
     st.markdown("<p style='color: #94a3b8;'>Yangın tehlikelerine karşı sadece teknolojiyle değil, toplumsal dayanışmayla da savaşıyoruz. Geleceğe nefes olmak için aşağıdaki aksiyonlara katılabilirsiniz.</p>", unsafe_allow_html=True)
     
-    # Tüm elemanlar 'with sekme_gonullu' bloğunun içine alındı
+    # Tüm elemanlar 'with sekme_gonullu' bloğunun içine al
     g_col1, g_col2, g_col3 = st.columns(3) 
     g_col1.metric("🌲 Toplam Bağışlanan Fidan", "4,218 Adet", "+120 Bugün")
     g_col2.metric("🤝 Aktif Şanlıurfa Gönüllüsü", "846 Kişi", "+14 Bu Hafta")
